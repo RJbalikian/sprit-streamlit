@@ -16,12 +16,14 @@ verbose = False
 
 if verbose:
     print('Start of file, session state length: ', len(st.session_state.keys()))
-param2print = None# 'period_limits'
-def print_param(key=param2print, show_type=True):
+param2print = None
+def print_param(key=param2print, write_key=False):
     if key is None:
         pass
     elif key in st.session_state.keys():
         print(key, st.session_state[key], 'type:', type(st.session_state[key]))
+        if write_key:
+            st.write(key, st.session_state[key], 'type:', type(st.session_state[key]))
 print_param(param2print)
 
 icon=r"C:\Users\riley\LocalData\Github\SPRIT-HVSR\sprit\resources\icon\sprit_icon_alpha.ico"
@@ -243,6 +245,8 @@ def on_file_upload():
 
 
 def on_run_data():
+    if 'run_button' not in st.session_state.keys() or not st.session_state.run_button:
+        return
     mainContainer = st.container()
     inputTab, outlierTab, infoTab, resultsTab = mainContainer.tabs(['Data', 'Outliers', 'Info','Results'])
     plotReportTab, csvReportTab, strReportTab = resultsTab.tabs(['Plot', 'Results Table', 'Print Report'])
@@ -289,13 +293,17 @@ def on_run_data():
                 st.session_state.hvsr_data = sprit_hvsr.run(datapath=st.session_state.datapath, **srun)
         
         write_to_info_tab(infoTab)
+        st.text(st.session_state.hvsr_data['Print_Report'])
         st.balloons()
         
-        inputTab.plotly_chart(st.session_state.hvsr_data['InputPlot'], use_container_width=True)
-        outlierTab.plotly_chart(st.session_state.hvsr_data['OutlierPlot'], use_container_width=True)
-        plotReportTab.plotly_chart(st.session_state.hvsr_data['HV_Plot'], use_container_width=True)
-        csvReportTab.dataframe(data=st.session_state.hvsr_data['CSV_Report'])
-        strReportTab.text(st.session_state.hvsr_data['Print_Report'])
+        if srun['plot_engine'] == 'plotly':
+            inputTab.plotly_chart(st.session_state.hvsr_data['InputPlot'], use_container_width=True)
+            outlierTab.plotly_chart(st.session_state.hvsr_data['OutlierPlot'], use_container_width=True)
+            plotReportTab.plotly_chart(st.session_state.hvsr_data['HV_Plot'], use_container_width=True)
+            csvReportTab.dataframe(data=st.session_state.hvsr_data['CSV_Report'])
+            strReportTab.text(st.session_state.hvsr_data['Print_Report'])
+
+            #inputTab.write(st.session_state.hvsr_data['InputPlot'], use_container_width=True, unsafe_allow_html=True)
 
     st.session_state.prev_datapath=st.session_state.datapath
     
@@ -338,7 +346,7 @@ with st.sidebar:
         resetCol, readCol, runCol = st.columns([0.3, 0.3, 0.4])
         resetCol.button('Reset', disabled=True, use_container_width=True)
         readCol.button('Read', use_container_width=True, args=((True, )))
-        runCol.button('Run', type='primary', use_container_width=True, on_click=on_run_data)
+        runCol.button('Run', type='primary', use_container_width=True, on_click=on_run_data, key='run_button')
     
     if verbose:
         print('Done setting up bottom container, session state length: ', len(st.session_state.keys()))
