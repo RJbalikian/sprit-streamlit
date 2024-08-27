@@ -26,7 +26,6 @@ def print_param(key=param2print, write_key=False):
             st.write(key, st.session_state[key], 'type:', type(st.session_state[key]))
 print_param(param2print)
 
-icon=r"C:\Users\riley\LocalData\Github\SPRIT-HVSR\sprit\resources\icon\sprit_icon_alpha.ico"
 icon=":material/ssid_chart:"
 aboutStr = """
 # About SpRIT
@@ -257,7 +256,7 @@ def on_run_data():
             if key in st.session_state.run_kws and value != st.session_state.default_params[key]:
                 srun[key] = value
         # Get plots all right
-        srun['plot_engine'] = 'plotly'
+        #srun['plot_engine'] = 'matplotlib'
         srun['plot_input_stream'] = True
         srun['show_plot'] = False
         srun['verbose'] = False #True
@@ -296,12 +295,17 @@ def on_run_data():
         st.text(st.session_state.hvsr_data['Print_Report'])
         st.balloons()
         
-        if srun['plot_engine'] == 'plotly':
+        if srun['plot_engine'].lower() == 'matplotlib':
+            inputTab.pyplot(st.session_state.hvsr_data['InputPlot'], use_container_width=True)
+            outlierTab.pyplot(st.session_state.hvsr_data['OutlierPlot'], use_container_width=True)
+            plotReportTab.pyplot(st.session_state.hvsr_data['HV_Plot'], use_container_width=True)
+        else: #if srun['plot_engine'].lower() == 'plotly':
             inputTab.plotly_chart(st.session_state.hvsr_data['InputPlot'], use_container_width=True)
             outlierTab.plotly_chart(st.session_state.hvsr_data['OutlierPlot'], use_container_width=True)
             plotReportTab.plotly_chart(st.session_state.hvsr_data['HV_Plot'], use_container_width=True)
-            csvReportTab.dataframe(data=st.session_state.hvsr_data['CSV_Report'])
-            strReportTab.text(st.session_state.hvsr_data['Print_Report'])
+
+        csvReportTab.dataframe(data=st.session_state.hvsr_data['CSV_Report'])
+        strReportTab.text(st.session_state.hvsr_data['Print_Report'])
 
             #inputTab.write(st.session_state.hvsr_data['InputPlot'], use_container_width=True, unsafe_allow_html=True)
 
@@ -541,7 +545,7 @@ with st.sidebar:
             if verbose:
                 print('Setting up plot tab, session state length: ', len(st.session_state.keys()))
 
-            st.selectbox("Plot Engine (currently only plotly supported)", options=['Matplotlib', "Plotly"], key='plot_engine', disabled=True)
+            st.selectbox("Plot Engine (currently only plotly supported)", options=['Matplotlib', "Plotly"], key='plot_engine', disabled=False)
             st.text_input("Plot type (plot string)", value='HVSR p ann C+ p ann Spec p', key='plot_type')
             st.multiselect("Charts to show", options=['HVSR', "Components", 'Spectrogram', 'Azimuth'], default=['HVSR', 'Components', "Spectrogram"], 
                                             on_change=update_plot_string, key='plotPlotStr')
