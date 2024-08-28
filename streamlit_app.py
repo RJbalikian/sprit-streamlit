@@ -255,6 +255,10 @@ def on_run_data():
         for key, value in st.session_state.items():
             if key in st.session_state.run_kws and value != st.session_state.default_params[key]:
                 srun[key] = value
+            
+            if key == 'plot_engine':
+                srun[key] = value
+                
         # Get plots all right
         #srun['plot_engine'] = 'matplotlib'
         srun['plot_input_stream'] = True
@@ -295,7 +299,7 @@ def on_run_data():
         st.text(st.session_state.hvsr_data['Print_Report'])
         st.balloons()
         
-        if srun['plot_engine'].lower() == 'matplotlib':
+        if st.session_state['plot_engine'].lower() == 'matplotlib':
             inputTab.pyplot(st.session_state.hvsr_data['InputPlot'], use_container_width=True)
             outlierTab.pyplot(st.session_state.hvsr_data['OutlierPlot'], use_container_width=True)
             plotReportTab.pyplot(st.session_state.hvsr_data['HV_Plot'], use_container_width=True)
