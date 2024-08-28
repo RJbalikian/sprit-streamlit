@@ -50,7 +50,7 @@ st.set_page_config('SpRIT HVSR',
 
 if verbose:
     print('Start setting up constants/variables, session state length: ', len(st.session_state.keys()))
-OBSPYFORMATS =  ['AH', 'ALSEP_PSE', 'ALSEP_WTH', 'ALSEP_WTN', 'CSS', 'DMX', 'GCF', 'GSE1', 'GSE2', 'KINEMETRICS_EVT', 'KNET', 'MSEED', 'NNSA_KB_CORE', 'PDAS', 'PICKLE', 'Q', 'REFTEK130', 'RG16', 'SAC', 'SACXY', 'SEG2', 'SEGY', 'SEISAN', 'SH_ASC', 'SLIST', 'SU', 'TSPAIR', 'WAV', 'WIN', 'Y']
+OBSPYFORMATS =  ['AH', 'ALSEP_PSE', 'ALSEP_WTH', 'ALSEP_WTN', 'CSS', 'DMX', 'GCF', 'GSE1', 'GSE2', 'KINEMETRICS_EVT', 'KNET', 'MSEED', 'NNSA_KB_CORE', 'PDAS', 'PICKLE', 'Q', 'REFTEK130', 'RG16', 'SAC', 'SACXY', 'SEG2', 'SEGY', 'SEISAN', 'SH_ASC', 'SLIST', 'SU', 'TRC', 'TSPAIR', 'WAV', 'WIN', 'Y']
 bandVals=[0.1,0.2,0.3,0.4,0.5,0.6,0.7,0.8,0.9,1,2,3,4,5,6,7,8,9,10,20,30,40,50,60,70,80,90,100]
 
 # SETUP KWARGS
@@ -194,6 +194,8 @@ def setup_session_state():
         st.session_state.peak_selection = run_kwargs['peak_selection'] = st.session_state.peak_selection.title()
         st.session_state.freq_smooth = run_kwargs['freq_smooth'] = st.session_state.freq_smooth.title()
         st.session_state.source = run_kwargs['source'] = st.session_state.source.title()
+        st.session_state.plot_engine = run_kwargs['plot_engine'] = st.session_state.plot_engine.title() 
+
         if verbose:
             print_param(param2print)
 
@@ -201,7 +203,6 @@ def setup_session_state():
         # Default adjustments
         methodDict = {'0':'Diffuse Field Assumption', '1':'Arithmetic Mean', '2':'Geometric Mean', '3':'Vector Summation', '4':'Quadratic Mean', '5':'Maximum Horizontal Value', '6':'Azimuth'}
         st.session_state.method = run_kwargs['method'] = methodDict[st.session_state.method]
-        st.session_state.plot_engine = run_kwargs['plot_engine'] = 'Plotly'
         if verbose:
             print_param(param2print)
 
@@ -549,7 +550,7 @@ with st.sidebar:
             if verbose:
                 print('Setting up plot tab, session state length: ', len(st.session_state.keys()))
 
-            st.selectbox("Plot Engine (currently only plotly supported)", options=['Matplotlib', "Plotly"], key='plot_engine', disabled=False)
+            st.selectbox("Plot Engine", options=['Matplotlib', "Plotly"], key='plot_engine', disabled=False)
             st.text_input("Plot type (plot string)", value='HVSR p ann C+ p ann Spec p', key='plot_type')
             st.multiselect("Charts to show", options=['HVSR', "Components", 'Spectrogram', 'Azimuth'], default=['HVSR', 'Components', "Spectrogram"], 
                                             on_change=update_plot_string, key='plotPlotStr')
