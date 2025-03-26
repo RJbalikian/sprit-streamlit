@@ -1,3 +1,4 @@
+import copy
 import datetime
 import inspect
 import pathlib
@@ -27,9 +28,13 @@ def print_param(key=PARAM2PRINT, write_key=False):
 print_param(PARAM2PRINT)
 
 icon=":material/ssid_chart:"
+if hasattr(sprit, '__version__'):
+    spritversion = sprit.__version__
+else:
+    spritversion = '2.0+'
 aboutStr = """
 # About SpRIT
-## v1.0.2
+### This app uses SpRIT v0.0.0
 
 SpRIT is developed by Riley Balikian at the Illinois State Geological Survey.
 
@@ -39,6 +44,8 @@ Please visit the following links for any questions:
 * [Pypi Repository](https://pypi.org/project/sprit/)
 
 """
+aboutStr = aboutStr.replace('0.0.0', spritversion)
+
 if VERBOSE:
     print('Start setting up page config, session state length: ', len(st.session_state.keys()))
 st.set_page_config('SpRIT HVSR',
@@ -87,6 +94,7 @@ def setup_session_state():
         ## About
         SpRIT HVSR is developed by the Illinois State Geological Survey, part of the Prairie Research Institute at the University of Illinois.
         
+        ### This app is using SpRIT v0.0.0
         ## Links
         * API Documentation may be accessed here: [ReadtheDocs](https://sprit.readthedocs.io/en/latest/sprit.html) and [Github Pages](https://rjbalikian.github.io/SPRIT-HVSR/main.html)
         * The Wiki and Tutorials may be accessed here: [https://github.com/RJbalikian/SPRIT-HVSR/wiki](https://github.com/RJbalikian/SPRIT-HVSR/wiki)
@@ -113,6 +121,8 @@ def setup_session_state():
         > OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
         > SOFTWARE.
         """
+        mainContainerInitText = mainContainerInitText.replace('0.0.0', spritversion)
+
         st.markdown(mainContainerInitText, unsafe_allow_html=True)
         if VERBOSE:
             print('Start sig loop, session state length: ', len(st.session_state.keys()))
@@ -228,6 +238,8 @@ def setup_session_state():
             print('Done with setup, session state length: ', len(st.session_state.keys()))
             print_param(PARAM2PRINT)
 
+        st.session_state['NewSessionState'] = copy.copy(st.session_state)
+
 setup_session_state()
 
 def check_if_default():
@@ -260,11 +272,16 @@ def on_run_data():
     resultsTab, inputTab, outlierTab, infoTab  = mainContainer.tabs(['Results', 'Input Data', 'Outliers', 'Info'])
     #htmlReportTab, plotReportTab, csvReportTab, strReportTab = resultsTab.tabs(['HTML Report', 'Plot', 'Results Table', 'Print Report'])
 
+    if st.session_state.input_data == '':
+        st.session_state.input_data = 'sample'
+
     if st.session_state.input_data!='':
         srun = {}
         for key, value in st.session_state.items():
-            if key in st.session_state.run_kws and value != st.session_state.default_params[key]:
-                srun[key] = value
+            if key in st.session_state.run_kws:
+                if value != st.session_state.default_params[key]:
+                    if str(value) != str(st.session_state.default_params[key]):
+                        srun[key] = value
             
             if key == 'plot_engine':
                 srun[key] = value
@@ -295,12 +312,18 @@ def on_run_data():
                                  'peak_freq_range':(0.4, 40),
                                  'stalta_thresh':(8, 16),
                                  'period_limits':(0.025, 2.5),
-                                 'remove_method':['Auto'],
+                                 'remove_method':['None'],
+                                 'report_export_format':None,
+                                 'show_pdf_report':False,
+                                 'show_print_report':True,
+                                 'show_plot_report':False,
                                  'elev_unit':'m',
                                  'plot_type':'HVSR p ann C+ p ann Spec p'
                                  }
+            
             nonDefaultParams = False
             for key, value in srun.items():
+
                 if key not in excludedKeys:
                     if key in secondaryDefaults and secondaryDefaults[key] == value:
                         pass
@@ -336,7 +359,56 @@ def on_run_data():
             #inputTab.write(st.session_state.hvsr_data['InputPlot'], use_container_width=True, unsafe_allow_html=True)
 
     st.session_state.prev_datapath=st.session_state.input_data
+
+
+def on_read_data():
+    if 'read_button' not in st.session_state.keys() or not st.session_state.read_button:
+        return
+    mainContainer = st.container()
+    inputTab, infoTab  = mainContainer.tabs(['Raw Seismic Data', 'Info'])
+
+    if st.session_state.input_data!='':
+        srun = {}
+        for key, value in st.session_state.items():
+            if key in st.session_state.run_kws:
+                if value != st.session_state.default_params[key]:
+                    if str(value) != str(st.session_state.default_params[key]):
+                        srun[key] = value
+            
+            if key == 'plot_engine':
+                srun[key] = value
     
+    ipKwargs = {k: v for k, v in st.session_state.items() if k in tuple(inspect.signature(sprit.input_params).parameters.keys())}
+    fdKwargs = {k: v for k, v in st.session_state.items() if k in tuple(inspect.signature(sprit.fetch_data).parameters.keys())}
+
+    #print(ipKwargs)
+    #sprint(fdKwargs)
+    fdKwargs['plot_input_stream'] = True
+        
+    st.toast('Reading data', icon="⌛")
+    with st.spinner(f"Reading data: {ipKwargs['input_data']}"):
+        inParams = sprit.input_params(**ipKwargs)
+        st.session_state.hvDataIN = sprit.fetch_data(inParams, **fdKwargs)
+
+    # Output plot to Raw Seismic Data tab
+    if str(fdKwargs['plot_engine']).lower() in ['matplotlib', 'mpl', 'm']:
+        inputTab.pyplot(st.session_state.hvDataIN['InputPlot'])
+    else:
+        inputTab.plotly_chart(st.session_state.hvDataIN['InputPlot'])
+
+    # Print information about the data to Info tab
+    infoTab.header("Information About Input Data")
+    infoTab.write(f"Acquisition Date: {st.session_state.hvDataIN['acq_date']}")
+
+    recLength = (UTCDateTime(st.session_state.hvDataIN['stream'][0].stats.endtime) - UTCDateTime(st.session_state.hvDataIN['stream'][0].stats.starttime))
+    infoTab.write(f"Record Length: {recLength/60:.2f} minutes ({recLength} seconds)")
+    
+
+def on_reset():
+    st.toast("Session state cleared")
+    st.session_state=st.session_state['NewSessionState']
+
+
 def write_to_info_tab(info_tab):
     with info_tab:
         st.markdown("# Processing Parameters Used")
@@ -372,20 +444,40 @@ with st.sidebar:
 
     # Create top menu
     with bottom_container:
-
         resetCol, readCol, runCol = st.columns([0.3, 0.3, 0.4])
-        resetCol.button('Reset', disabled=True, use_container_width=True)
-        readCol.button('Read', use_container_width=True, args=((True, )))
+        resetCol.button('Reset', disabled=False, use_container_width=True, on_click=on_reset, key='reset_button')
+        readCol.button('Read', disabled=False, use_container_width=True, on_click=on_read_data, key='read_button')
         runCol.button('Run', type='primary', use_container_width=True, on_click=on_run_data, key='run_button')
     
     if VERBOSE:
         print('Done setting up bottom container, session state length: ', len(st.session_state.keys()))
         print_param(PARAM2PRINT)
 
+    mainSettings = st.container()
+
+    with mainSettings:
+        siteNameCol, instCol = st.columns([0.5, 0.5])
+        siteNameCol.text_input("Site Name", placeholder='HVSR Site', on_change=text_change, key='site')
+        #instCol.text_input('Instrument', help='Raspberry Shake and Tromino are currently the only values with special treatment. If a filepath, can use a .inst instrument file (json format)', key='instrument')
+        instCol.selectbox('Instrument', key='instrument',
+                        options=['N/A', 'Raspberry Shake', 'Tromino Yellow', 'Tromino Blue'], 
+                        help='Some instruments require special inputs to read in the data correctly. If not one of the instruments listed, or if reading in an obspy-supported file directly, leave as N/A')
+
+        xCoordCol, yCoordCol, inCRSCol = st.columns([0.3333, 0.3333, 0.33333])
+        xCoordCol.text_input('X Coordinate', help='i.e., Longitude or Easting', key='xcoord')
+        yCoordCol.text_input('Y Coordinate', help='i.e., Latitude or Northing', key='ycoord')
+        inCRSCol.text_input('CRS', help='By default, "EPSG:4326". Can be EPSG code or anything accepted by pyproj.CRS.from_user_input()', key='input_crs')        
+        
+        zCoordCol, elevUnitCol = st.columns([0.666, 0.333])
+        zCoordCol.text_input('Z Coordinate (elevation)', help='i.e., Elevation', key='elevation')
+        elevUnitCol.selectbox('Elev. (Z) Unit', options=['meters', 'feet'], key='elev_unit', help='i.e., Elevation unit')
+
+        st.select_slider('HVSR Band',  value=st.session_state.hvsr_band, options=bandVals, key='hvsr_band')
+        st.select_slider('Peak Frequency Range',  value=st.session_state.peak_freq_range, options=bandVals, key='peak_freq_range')
 
 
-    st.header('Settings', divider='gray')
-    with st.expander('Expand to modify settings'):
+    st.header('Additional Settings', divider='gray')
+    with st.expander('Expand to modify additional settings'):
         if VERBOSE:
             print('Setting up sidebar expander, session state length: ', len(st.session_state.keys()))
             print_param(PARAM2PRINT)
@@ -396,15 +488,14 @@ with st.sidebar:
         with ipSetTab:
             if VERBOSE:
                 print('Setting up input tab, session state length: ', len(st.session_state.keys()))
-            st.text_input("Site Name", placeholder='HVSR Site', on_change=text_change, key='site')
 
             #with st.expander('Primary Input Parameters', expanded=True):
 
-            st.text_input('Instrument', help='Raspberry Shake and Tromino are currently the only values with special treatment. If a filepath, can use a .inst instrument file (json format)', key='instrument')
+            #st.text_input('Instrument', help='Raspberry Shake and Tromino are currently the only values with special treatment. If a filepath, can use a .inst instrument file (json format)', key='instrument')
             st.text_input('Metadata Filepath', help='Filepath to instrument response file', key='metapath')
 
-            st.select_slider('HVSR Band',  value=st.session_state.hvsr_band, options=bandVals, key='hvsr_band')
-            st.select_slider('Peak Frequency Range',  value=st.session_state.peak_freq_range, options=bandVals, key='peak_freq_range')
+            #st.select_slider('HVSR Band',  value=st.session_state.hvsr_band, options=bandVals, key='hvsr_band')
+            #st.select_slider('Peak Frequency Range',  value=st.session_state.peak_freq_range, options=bandVals, key='peak_freq_range')
 
             #with st.expander('Acquisition Date/Time'):
             st.date_input('Acquisition Date', format='YYYY-MM-DD', key='acq_date')
@@ -415,11 +506,11 @@ with st.sidebar:
             tZoneList.sort()
             tZoneList.insert(0, "localtime")
             tZoneList.insert(0, "US/Pacific")
+            tZoneList.insert(0, "US/Mountain")
             tZoneList.insert(0, "US/Eastern")
             tZoneList.insert(0, "US/Central")
             tZoneList.insert(0, "UTC")
             st.selectbox('Timezone', options=tZoneList, key='tzone')
-
 
             #with st.expander('Instrument settings'):
             st.text_input("Network", placeholder='AM', key='network')
@@ -428,13 +519,12 @@ with st.sidebar:
             st.text_input("Channels", placeholder='EHZ, EHE, EHN', key='channels')
 
             #with st.expander('Location settings'):
-            st.text_input('X Coordinate', help='i.e., Longitude or Easting', key='xcoord')
-            st.text_input('Y Coordinate', help='i.e., Latitude or Northing', key='ycoord')
-            st.text_input('Z Coordinate', help='i.e., Elevation', key='elevation')
-            st.session_state.elev_unit = st.selectbox('Z Unit', options=['m', 'ft'], help='i.e., Elevation unit')
-            st.number_input('Depth', help='i.e., Depth of measurement below ground surface (not currently used)', key='depth')
+            #st.text_input('X Coordinate', help='i.e., Longitude or Easting', key='xcoord')
+            #st.text_input('Y Coordinate', help='i.e., Latitude or Northing', key='ycoord')
+            #st.text_input('Z Coordinate', help='i.e., Elevation', key='elevation')
+            #st.session_state.elev_unit = st.selectbox('Z Unit', options=['m', 'ft'], help='i.e., Elevation unit')
+            #st.number_input('Depth', help='i.e., Depth of measurement below ground surface (not currently used)', key='depth')
 
-            st.text_input('CRS of Input Coordinates', help='Can be EPSG code or anything accepted by pyproj.CRS.from_user_input()', key='input_crs')
             st.text_input('CRS for Export', help='Can be EPSG code or anything accepted by pyproj.CRS.from_user_input()', key='output_crs')
             if VERBOSE:
                 print_param(PARAM2PRINT)
@@ -452,7 +542,6 @@ with st.sidebar:
             st.text_input('Detrend options', value='detrend_options=2', help="Comma separated values with equal sign between key/value of arguments to pass to the **options argument of obspy.trace.Trace.detrend()", key='detrend_options')
             if VERBOSE:
                 print_param(PARAM2PRINT)
-
         
         #@st.experimental_dialog("Update Parameters to Generate PPSDs", width='large')
         #def open_ppsd_dialog():
