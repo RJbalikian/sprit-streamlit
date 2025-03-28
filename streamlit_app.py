@@ -1,3 +1,15 @@
+try:
+    from sprit import sprit_hvsr as sprit
+    from sprit import sprit_plot
+except Exception:
+    try:
+        import sprit_hvsr as sprit
+        import sprit_plot
+
+    except Exception:
+        import sprit
+        import sprit.sprit_plot as sprit_plot
+
 import copy
 import datetime
 import inspect
@@ -11,7 +23,6 @@ import streamlit as st
 from obspy import UTCDateTime
 from obspy.signal.spectral_estimation import PPSD
 
-from sprit import sprit_hvsr as sprit
 
 VERBOSE = False
 
@@ -164,7 +175,7 @@ def setup_session_state():
         #        run_kwargs[arg] = st.session_state[arg]
 
         # Convert lists and numbers to strings
-        strItems = ['channels', 'xcoord', 'ycoord', 'elevation', 'detrend_options', 'horizontal_method']
+        strItems = ['channels', 'xcoord', 'ycoord', 'elevation', 'detrend_options', 'filter_options', 'horizontal_method']
         for arg, value in st.session_state.items():
             if arg in strItems:
                 if isinstance(value, (list, tuple)):
@@ -202,17 +213,22 @@ def setup_session_state():
         # Case matching
         st.session_state.data_export_format = run_kwargs['data_export_format'] = st.session_state.data_export_format.upper()
         st.session_state.detrend = run_kwargs['detrend'] = st.session_state.detrend.title()
+        st.session_state.azimuth_type = run_kwargs['azimuth_type'] = st.session_state.azimuth_type.title()
         st.session_state.peak_selection = run_kwargs['peak_selection'] = st.session_state.peak_selection.title()
         st.session_state.freq_smooth = run_kwargs['freq_smooth'] = st.session_state.freq_smooth.title()
         st.session_state.source = run_kwargs['source'] = st.session_state.source.title()
         st.session_state.plot_engine = run_kwargs['plot_engine'] = st.session_state.plot_engine.title()
-        
+               
         # Update Nones
         # Remove method
         if st.session_state.remove_method is None:
             st.session_state.remove_method = run_kwargs['remove_method'] = 'None'
         else:
             st.session_state.remove_method = run_kwargs['remove_method'] = st.session_state.remove_method.title()
+
+        # Other updates
+        st.session_state.azimuth_unit = run_kwargs['azimuth_unit'] = '°'
+        
 
         # Horizontal_method
         methodDict = {'0':'Diffuse Field Assumption', '1':'Arithmetic Mean', '2':'Geometric Mean', '3':'Vector Summation', '4':'Quadratic Mean', '5':'Maximum Horizontal Value', '6':'Azimuth', "None":"Vector Summation"}            
@@ -343,12 +359,16 @@ def on_run_data():
 
 
         #htmlReportTab.html(st.session_state.hvsr_data['HTML_Report'])
-        
+        st.session_state.hvsr_data['OutlierPlot'] = sprit_plot.plot_outlier_curves(st.session_state.hvsr_data, 
+                                                rmse_thresh=100, use_percentile=True,
+                                                use_hv_curve=st.session_state.use_hv_curve, from_roc=False, 
+                                                show_plot=False, verbose=False)
+
         if st.session_state['plot_engine'].lower() == 'matplotlib':
             inputTab.pyplot(st.session_state.hvsr_data['InputPlot'], use_container_width=True)
-            outlierTab.pyplot(st.session_state.hvsr_data['OutlierPlot'], use_container_width=True)
+            outlierTab.plotly_chart(st.session_state.hvsr_data['OutlierPlot'], use_container_width=True)
         #    plotReportTab.pyplot(st.session_state.hvsr_data['HV_Plot'], use_container_width=True)
-        #else: #if srun['plot_engine'].lower() == 'plotly':
+        else: #if srun['plot_engine'].lower() == 'plotly':
             inputTab.plotly_chart(st.session_state.hvsr_data['InputPlot'], use_container_width=True)
             outlierTab.plotly_chart(st.session_state.hvsr_data['OutlierPlot'], use_container_width=True)
         #    plotReportTab.plotly_chart(st.session_state.hvsr_data['HV_Plot'], use_container_width=True)
@@ -390,11 +410,17 @@ def on_read_data():
         inParams = sprit.input_params(**ipKwargs)
         st.session_state.hvDataIN = sprit.fetch_data(inParams, **fdKwargs)
 
+    def plotly_click(click):
+        print('plot clicked')
+        print(click)
     # Output plot to Raw Seismic Data tab
     if str(fdKwargs['plot_engine']).lower() in ['matplotlib', 'mpl', 'm']:
         inputTab.pyplot(st.session_state.hvDataIN['InputPlot'])
     else:
-        inputTab.plotly_chart(st.session_state.hvDataIN['InputPlot'])
+        #event = inputTab.plotly_chart(sprit_plot.__plotly_express_preview(st.session_state.hvDataIN)[0],
+        event = inputTab.plotly_chart(st.session_state.hvDataIN['InputPlot'],
+                                use_container_width=True,
+                                on_select=plotly_click)
 
     # Print information about the data to Info tab
     infoTab.header("Information About Input Data")
@@ -435,7 +461,13 @@ with st.sidebar:
         print_param(PARAM2PRINT)
 
     st.header('SpRIT HVSR', divider='rainbow')
-    datapathInput = st.text_input("Datapath", key='input_data', placeholder='Enter data filepath (to be read by obspy.core.Stream.read())')    
+    inputDataCol, sourceCol = st.columns([0.7, 0.3])
+    datapathInput = inputDataCol.text_input("Datapath", key='input_data', 
+                                        placeholder='Enter data filepath', 
+                                        help="Enter a filepath to be read by obspy.read(). On the web app, a temporary copy of this file will be made.")    
+    sourceCol.selectbox('Source', options=['File', 'Raw', 'Directory', "Batch"], index=0, key='source',
+                        help='File: a single file for analysis. All the rest are experimental in the web app. Raw is used with Raspberry Shake data to read native file structure. Directory gets all relevant files in a directory. Batch is for loading a .csv file for batch analysis.')
+
     #st.file_uploader('Upload data file(s)', type=OBSPYFORMATS, accept_multiple_files=True, key='datapath_uploader', on_change=on_file_upload)
     with st.expander("Click to access data uploader"):
         st.file_uploader("Upload data file(s)", type=OBSPYFORMATS, accept_multiple_files=False, key='datapath_uploader', on_change=on_file_upload)
@@ -453,14 +485,16 @@ with st.sidebar:
         print('Done setting up bottom container, session state length: ', len(st.session_state.keys()))
         print_param(PARAM2PRINT)
 
+    st.header('Settings')
     mainSettings = st.container()
 
     with mainSettings:
-        siteNameCol, instCol = st.columns([0.5, 0.5])
+
+        siteNameCol, instCol = st.columns([0.33333, 0.33333])
         siteNameCol.text_input("Site Name", placeholder='HVSR Site', on_change=text_change, key='site')
         #instCol.text_input('Instrument', help='Raspberry Shake and Tromino are currently the only values with special treatment. If a filepath, can use a .inst instrument file (json format)', key='instrument')
         instCol.selectbox('Instrument', key='instrument',
-                        options=['N/A', 'Raspberry Shake', 'Tromino Yellow', 'Tromino Blue'], 
+                        options=['Seismometer', 'Raspberry Shake', 'Tromino Yellow', 'Tromino Blue'], 
                         help='Some instruments require special inputs to read in the data correctly. If not one of the instruments listed, or if reading in an obspy-supported file directly, leave as N/A')
 
         xCoordCol, yCoordCol, inCRSCol = st.columns([0.3333, 0.3333, 0.33333])
@@ -472,8 +506,11 @@ with st.sidebar:
         zCoordCol.text_input('Z Coordinate (elevation)', help='i.e., Elevation', key='elevation')
         elevUnitCol.selectbox('Elev. (Z) Unit', options=['meters', 'feet'], key='elev_unit', help='i.e., Elevation unit')
 
-        st.select_slider('HVSR Band',  value=st.session_state.hvsr_band, options=bandVals, key='hvsr_band')
-        st.select_slider('Peak Frequency Range',  value=st.session_state.peak_freq_range, options=bandVals, key='peak_freq_range')
+        if "peak_freq_range" not in st.session_state:
+            st.session_state.peak_freq_range = [0.4, 40]
+        st.select_slider('Peak Frequency Range', options=bandVals, key='peak_freq_range', 
+                        value=st.session_state.peak_freq_range
+                        )
 
 
     st.header('Additional Settings', divider='gray')
@@ -482,7 +519,7 @@ with st.sidebar:
             print('Setting up sidebar expander, session state length: ', len(st.session_state.keys()))
             print_param(PARAM2PRINT)
 
-        ipSetTab, fdSetTab, rmnocSetTab, gpSetTab, phvsrSetTab, plotSetTab = st.tabs(['Input', 'Data', "Noise", 'PPSDs', 'H/V', 'Plot'])
+        ipSetTab, fdSetTab, azSetTab, rmnocSetTab, gpSetTab, phvsrSetTab, plotSetTab = st.tabs(['Input', 'Data', "Azimuths", "Noise", 'PPSDs', 'H/V', 'Plot'])
         #@st.experimental_dialog("Update Input Parameters", width='large')
         #def open_ip_dialog():
         with ipSetTab:
@@ -490,10 +527,13 @@ with st.sidebar:
                 print('Setting up input tab, session state length: ', len(st.session_state.keys()))
 
             #with st.expander('Primary Input Parameters', expanded=True):
+            if "hvsr_band" not in st.session_state:
+                st.session_state.hvsr_band = [0.4, 40]
+            st.select_slider('HVSR Band', options=bandVals, key='hvsr_band',
+                            value=st.session_state.hvsr_band
+                            )
 
             #st.text_input('Instrument', help='Raspberry Shake and Tromino are currently the only values with special treatment. If a filepath, can use a .inst instrument file (json format)', key='instrument')
-            st.text_input('Metadata Filepath', help='Filepath to instrument response file', key='metapath')
-
             #st.select_slider('HVSR Band',  value=st.session_state.hvsr_band, options=bandVals, key='hvsr_band')
             #st.select_slider('Peak Frequency Range',  value=st.session_state.peak_freq_range, options=bandVals, key='peak_freq_range')
 
@@ -529,20 +569,189 @@ with st.sidebar:
             if VERBOSE:
                 print_param(PARAM2PRINT)
 
+            st.text_input('Metadata Filepath', help='Filepath to instrument response file', key='metapath')
+
+
         #@st.experimental_dialog("Update Parameters to Fetch Data", width='large')
         #def open_fd_dialog():
         with fdSetTab:
             if VERBOSE:
                 print('Setting up fd tab, session state length: ', len(st.session_state.keys()))
             #source: str = 'file',
-            st.selectbox('Source', options=['File', 'Raw', 'Directory', "Batch"], index=0, key='source')
-            st.text_input('Data Export Directory', help='Directory for exporting raw/trimmed data', key='data_export_dir')
-            st.selectbox('Data format', options=OBSPYFORMATS, index=11, key='data_export_format')
-            st.selectbox('Detrend Type', options=['None', 'Simple', 'Linear', 'Constant/Demean', 'Polynomial', 'Spline'], index=5, help='Detrend Type use by `type` parameter of obspy.trace.Trace.detrend()', key='detrend')
-            st.text_input('Detrend options', value='detrend_options=2', help="Comma separated values with equal sign between key/value of arguments to pass to the **options argument of obspy.trace.Trace.detrend()", key='detrend_options')
+            st.text_input('Data export directory', help='Directory for exporting raw/trimmed data', key='data_export_dir')
+            st.selectbox('Data export format', options=OBSPYFORMATS, index=11, key='data_export_format')
+
+            # Detrending options
+            st.selectbox('Detrend Type', options=['None', 'Simple', 'Linear', 'Constant/Demean', 'Polynomial', 'Spline'], index=5, 
+                        help='Detrend Type use by `type` parameter of obspy.trace.Trace.detrend()', key='detrend')
+            st.text_input('Detrend options', value='order=2', 
+                        help="Value(s) to pass to the **options argument of obspy.trace.Trace.detrend()", 
+                        key='detrend_options')
+
+            # Filter options
+            st.selectbox('Filter Type', options=['None', 'bandpass', 'bandstop', 
+                                                'lowpass', 'highpass', 
+                                                'lowpass_cheby_2', 'lowpass_fir', 'remez_fir'], 
+                        index=0, 
+                        help='Detrend Type use by `type` parameter of obspy.trace.Trace.filter()', key='filter')
+            
+            st.text_input('Filter options',
+                        help="Value(s) to pass to the **options argument of obspy.trace.Trace.filter()", 
+                        key='filter_options')
+
+            if VERBOSE:
+                print_param(PARAM2PRINT)
+
+        with azSetTab:
+            if VERBOSE:
+                print('Setting up az tab, session state length: ', len(st.session_state.keys()))
+
+            st.toggle("Calculate Azimuths", value=False, 
+                        help='Whether to calculate azimuths for data.', key='azimuth_calculation')
+
+            az_disabled = not st.session_state.azimuth_calculation
+        
+            st.selectbox('Azimuth type', disabled=az_disabled, options=['Multiple', 'Single'], index=0, key='azimuth_type')
+
+            azAngCol, azUnitCol = st.columns([0.7,0.3])
+            azAngCol.number_input("Azimuth angle", value=30, key='azimuth_angle', disabled=az_disabled)
+            azUnitCol.selectbox('Azimuth unit', options=['°', 'rad'], index=0, key='azimuth_unit', disabled=az_disabled)
+
             if VERBOSE:
                 print_param(PARAM2PRINT)
         
+        #@st.experimental_dialog("Update Parameters to Remove Noise and Outlier Curves", width='large')
+        #def open_outliernoise_dialog():
+        with rmnocSetTab:
+            if VERBOSE:
+                print('Setting up noise tab, session state length: ', len(st.session_state.keys()))
+            # Set up toggles and options
+            remNoiseCol, rawNoiseCol = st.columns([0.55, 0.45])
+            remNoiseCol.toggle("Remove Noise", value=False, 
+                        help='Whether to remove noise from input data.', key='noise_removal')
+            noiseRemDisabled = not st.session_state.noise_removal
+
+            rawNoiseCol.toggle("Raw data", disabled=noiseRemDisabled, help='Whether to use the raw input data to remove noise.', key='remove_raw_noise')
+
+            remNoisePopover = st.popover('Remove Noise options', disabled=noiseRemDisabled, use_container_width=True)
+            with remNoisePopover:
+                # Auto noise
+                st.toggle("Auto Noise Removal", value=False, disabled=noiseRemDisabled, 
+                            help='Whether to remove noise from input data.', key='auto_noise_removal')
+                            
+                st.divider()
+
+                do_stalta = False
+                do_sat = False
+                do_noise = False
+                do_stdev = False
+                do_warm = False
+                do_cool = False
+                do_outCurve = False
+
+                doNoiseRemList = [do_stalta, do_sat, do_noise, do_stdev, do_warm, do_cool]
+                autoRemList = [do_stdev, do_sat]
+
+                if not st.session_state.noise_removal:
+                    for doNR in doNoiseRemList:
+                        doNR = False
+
+                if st.session_state.auto_noise_removal and not any(autoRemList):
+                    do_stdev = True
+                    do_sat = True
+
+                # Standard devation ratio
+                st.toggle("StDev Ratio Noise Detection", value=do_stdev, disabled=noiseRemDisabled, 
+                            help='Whether to remove noise from input data.', key='stdev_noise_removal')
+                stDevDisabled = (not st.session_state.stdev_noise_removal) or noiseRemDisabled
+                #std_ratio_thresh=2.0, std_window_size=20.0, min_std_win=5.0,
+                st.number_input('Moving StDev. Threshold', min_value=0.0, max_value=100.0, step=0.1, value=2.0,
+                                help='The threshold value of StDev_Moving / StDev_Total to use as a removal threshold',
+                                format="%.1f", disabled=stDevDisabled, key='std_ratio_thresh')
+                mvStDWinCol, minStDWinCol = st.columns([0.5, 0.5])
+                mvStDWinCol.number_input('Moving StDev. Win Size (samples)', value=20, 
+                                help='The size of the window to use to calculate the rolling standard deviation',
+                                disabled=stDevDisabled, step=1, key='std_window_size')
+                minStDWinCol.number_input('Min. Win. Size (samples)', value=5, 
+                                help="The minimum number of samples in a row that exceed the ratio threshold for that window to be removed",
+                                disabled=stDevDisabled, step=1, key='min_std_win')
+
+                # Saturation threshold
+                st.toggle("Saturation Threshold Noise Detection", value=do_sat, disabled=noiseRemDisabled, 
+                            help='Whether to remove noise from input data.', key='sat_noise_removal')
+                satRemDisabled = (not st.session_state.sat_noise_removal) or noiseRemDisabled
+
+
+                st.number_input('Saturation Percent', value=0.99, min_value=0.0, max_value=1.0, step=0.01,
+                                format="%.2f", disabled=satRemDisabled, key='sat_percent')
+
+                # STALTA
+                st.toggle("STALTA Noise Detection", value=do_stalta, disabled=noiseRemDisabled, 
+                            help='Whether to remove noise from input data.', key='stalta_noise_removal')
+                staltaDisabled = (not st.session_state.stalta_noise_removal) or noiseRemDisabled
+
+                staCol, ltaCol = st.columns([0.5,0.5])
+                staCol.number_input('Short Term Average (STA)', step=0.5, value=2.0,
+                                help='Length of moving window (in seconds) for calculating STA average',
+                                disabled=staltaDisabled, key='sta')
+                ltaCol.number_input('Long Term Average (LTA)', value=30.0,
+                                help='Length of moving window (in seconds) for calculating LTA average',
+                                disabled=staltaDisabled, step=0.5, key='lta')
+                staltaVals = np.arange(0, 51).tolist()
+                st.select_slider('STA/LTA Thresholds', disabled=staltaDisabled, 
+                                help='Trigger thresholds for STA/LTA calculation',
+                                value=st.session_state.stalta_thresh, options=staltaVals, key='stalta_thresh')
+
+                # Noise threshold
+                st.toggle("Noise Threshold Noise Detection", value=do_noise, disabled=noiseRemDisabled, 
+                            help='Whether to remove noise from input data.', key='noise_thresh_noise_removal')
+                noiseDisabled = (not st.session_state.noise_thresh_noise_removal) or noiseRemDisabled
+
+                st.number_input('Noise Percent', value=0.8, min_value=0.0, max_value=1.0, step=0.05, 
+                                format="%.2f", disabled=noiseDisabled, key='noise_percent')
+
+                st.number_input('Minimum Window Size (samples)', value=1, step=1,
+                                disabled=noiseDisabled, key='min_win_size')
+
+
+                # Warmup
+                st.toggle("Warmup Time Removal", value=do_warm, disabled=noiseRemDisabled, 
+                            help='Whether to remove noise from input data.', key='warmup_noise_removal')
+                warmupDisabled = (not st.session_state.warmup_noise_removal) or noiseRemDisabled
+
+                st.number_input('Warmup Time (seconds)', disabled=warmupDisabled, step=1, key='warmup_time')
+
+                # Cooldown
+                st.toggle("Cooldown Time Removal", value=do_cool, disabled=noiseRemDisabled, 
+                            help='Whether to remove noise from input data.', key='cooldown_noise_removal')
+                cooldownDisabled = (not st.session_state.cooldown_noise_removal) or noiseRemDisabled
+
+                st.number_input('Cooldown Time (seconds)', disabled=cooldownDisabled, step=1, key='cooldown_time')
+
+
+            st.toggle("Remove Outlier Curves", value=False,
+                        help='Whether to remove outlier curves from input data.', key='outlier_curves_removal')
+            outlierCurveDisabled = not st.session_state.outlier_curves_removal
+
+            # Outlier curves
+            remCurvePopover = st.popover('Remove Outlier Curve Options', disabled=outlierCurveDisabled, use_container_width=True)
+            with remCurvePopover:
+                st.number_input("Outlier Threshold", disabled=outlierCurveDisabled, value=98, key='rmse_thresh')
+                st.radio('Threshold type', horizontal=True, disabled=outlierCurveDisabled, options=['Percentile', 'Value'], key='threshRadio')
+                st.session_state.use_percentile = st.session_state.threshRadio=='Percentile'
+                st.radio('Threshold curve', horizontal=True, disabled=outlierCurveDisabled, options=['HV Curve', 'Component Curves'], key='curveRadio')
+                st.session_state.use_hv_curve = (st.session_state.curveRadio=='HV Curve')
+
+
+
+            #noise_rem_method_list = ['None', 'Auto', 'Manual', 'Stalta', 'Saturation Threshold', 'Noise Threshold', 'Warmup', 'Cooldown', 'Buffer']
+            #st.multiselect("Noise Removal Method",
+            #            options=,
+            #            key='remove_method')
+
+            if VERBOSE:
+                print_param(PARAM2PRINT)
+
         #@st.experimental_dialog("Update Parameters to Generate PPSDs", width='large')
         #def open_ppsd_dialog():
         with gpSetTab:
@@ -564,32 +773,6 @@ with st.sidebar:
 
             st.select_slider('Period Limits (s)', options=periodVals, value=st.session_state.period_limits, key='period_limits')
             st.selectbox("Special Handling", options=['None', 'Ringlaser', 'Hydrophone'], key='special_handling')
-            if VERBOSE:
-                print_param(PARAM2PRINT)
-
-        #@st.experimental_dialog("Update Parameters to Remove Noise and Outlier Curves", width='large')
-        #def open_outliernoise_dialog():
-        with rmnocSetTab:
-            if VERBOSE:
-                print('Setting up noise tab, session state length: ', len(st.session_state.keys()))
-            st.number_input("Outlier Threshold", value=98, key='rmse_thresh')
-            st.radio('Threshold type', options=['Percentile', 'Value'], key='threshRadio')
-            st.session_state.use_percentile = st.session_state.threshRadio=='Percentile'
-            st.radio('Threshold curve', options=['HV Curve', 'Component Curves'], key='curveRadio')
-            st.session_state.use_hv_curve = (st.session_state.curveRadio=='HV Curve')
-
-            st.multiselect("Noise Removal Method",
-                        options=['None', 'Auto', 'Manual', 'Stalta', 'Saturation Threshold', 'Noise Threshold', 'Warmup', 'Cooldown', 'Buffer'], key='remove_method')
-            st.number_input('Saturation Percent', min_value=0.0, max_value=1.0, step=0.01, format="%.3f", key='sat_percent')
-            st.number_input('Noise Percent', min_value=0.0, max_value=1.0, step=0.1, format="%.2f", key='noise_percent')
-            st.number_input('Short Term Average (STA)', step=1.0, format="%.1f", key='sta')
-            st.number_input('Long Term Average (LTA)', step=1.0, format="%.1f", key='lta')
-            staltaVals = np.arange(0, 51).tolist()
-            st.select_slider('STA/LTA Thresholds', value=st.session_state.stalta_thresh, options=staltaVals, key='stalta_thresh')
-            st.number_input('Warmup Time (seconds)', step=1, key='warmup')
-            st.number_input('Cooldown Time (seconds)', step=1, key='cooldown')
-            st.number_input('Minimum Window Size (samples)', step=1, key='min_win_size')
-            st.toggle("Remove Raw Noise", help='Whether to use the raw input data to remove noise.', key='remove_raw_noise')
             if VERBOSE:
                 print_param(PARAM2PRINT)
 
@@ -687,3 +870,4 @@ if VERBOSE:
     print_param(PARAM2PRINT)
 #if __name__ == "__main__":
 #    main()
+
