@@ -1,13 +1,5 @@
-try:
-    from sprit import sprit_hvsr as sprit
-    from sprit import sprit_plot
-except Exception:
-    try:
-        import sprit_hvsr as sprit
-        import sprit_plot
-
-    except Exception:
-        import sprit
+import sprit
+from sprit import sprit_hvsr
 
 import copy
 import datetime
@@ -31,15 +23,6 @@ import streamlit as st
 from obspy import UTCDateTime
 from obspy.signal.spectral_estimation import PPSD
 from scipy import signal
-
-try:
-    import sprit
-    from sprit import sprit_hvsr
-except Exception:
-    try:
-        import sprit_hvsr
-    except Exception:
-        import sprit as sprit_hvsr
 
 VERBOSE = False
 
@@ -131,12 +114,12 @@ if VERBOSE:
     print_param(PARAM2PRINT)
 
 # Get default values
-funList = [[sprit.run, run_kwargs], [sprit.input_params, ip_kwargs],
-           [sprit.fetch_data, fd_kwargs], [sprit.calculate_azimuth, ca_kwargs],
-           [sprit.remove_noise, rn_kwargs], [sprit.generate_psds, gpsd_kwargs],
-           [PPSD, gpsd_kwargs], [sprit.process_hvsr, phvsr_kwargs],
-           [sprit.remove_outlier_curves, roc_kwargs],
-           [sprit.check_peaks, cp_kwargs], [sprit.get_report, gr_kwargs]]
+funList = [[sprit_hvsr.run, run_kwargs], [sprit_hvsr.input_params, ip_kwargs],
+           [sprit_hvsr.fetch_data, fd_kwargs], [sprit_hvsr.calculate_azimuth, ca_kwargs],
+           [sprit_hvsr.remove_noise, rn_kwargs], [sprit_hvsr.generate_psds, gpsd_kwargs],
+           [PPSD, gpsd_kwargs], [sprit_hvsr.process_hvsr, phvsr_kwargs],
+           [sprit_hvsr.remove_outlier_curves, roc_kwargs],
+           [sprit_hvsr.check_peaks, cp_kwargs], [sprit_hvsr.get_report, gr_kwargs]]
 
 
 # Function to initialize session state variables
@@ -483,13 +466,13 @@ def on_read_data():
             if key == 'plot_engine':
                 srun[key] = value
     
-    ipKwargs = {k: v for k, v in st.session_state.items() if k in tuple(inspect.signature(sprit.input_params).parameters.keys())}
-    fdKwargs = {k: v for k, v in st.session_state.items() if k in tuple(inspect.signature(sprit.fetch_data).parameters.keys())}
+    ipKwargs = {k: v for k, v in st.session_state.items() if k in tuple(inspect.signature(sprit_hvsr.input_params).parameters.keys())}
+    fdKwargs = {k: v for k, v in st.session_state.items() if k in tuple(inspect.signature(sprit_hvsr.fetch_data).parameters.keys())}
 
     st.toast('Reading data', icon="⌛")
     with st.spinner(f"Reading data: {ipKwargs['input_data']}"):
-        inParams = sprit.input_params(**ipKwargs)
-        st.session_state.hvsr_data = sprit.fetch_data(inParams, **fdKwargs)
+        inParams = sprit_hvsr.input_params(**ipKwargs)
+        st.session_state.hvsr_data = sprit_hvsr.fetch_data(inParams, **fdKwargs)
     st.session_state.stream = st.session_state.hvsr_data.stream
     if hasattr(st.session_state.hvsr_data, 'stream_edited'):
         st.session_state.stream_edited = st.session_state.hvsr_data.stream_edited
@@ -576,7 +559,7 @@ def display_download_buttons():
     # PDF Report download
     @st.cache_data
     def _convert_pdf_for_download(_hv_data):
-        pdfPath = sprit._generate_pdf_report(_hv_data, return_pdf_path=True)
+        pdfPath = sprit_hvsr._generate_pdf_report(_hv_data, return_pdf_path=True)
         with open(pdfPath, "rb") as pdf_file:
             PDFbyte = pdf_file.read()
         return PDFbyte
@@ -1221,7 +1204,7 @@ with st.sidebar:
         zCoordCol.text_input('Z Coordinate (elevation)', help='i.e., Elevation', key='elevation')
         elevUnitCol.selectbox('Elev. (Z) Unit', options=['meters', 'feet'], key='elev_unit', help='i.e., Elevation unit')
 
-        pfrDef = tuple(inspect.signature(sprit.input_params).parameters['peak_freq_range'].default)
+        pfrDef = tuple(inspect.signature(sprit_hvsr.input_params).parameters['peak_freq_range'].default)
         #if "peak_freq_range" not in st.session_state:
         #    st.session_state.peak_freq_range = tuple(pfrDef)
         
