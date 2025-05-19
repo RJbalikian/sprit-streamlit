@@ -513,6 +513,8 @@ def display_results():
     # Set up container for output data
     setup_main_container(do_setup_tabs=True)
 
+    st.session_state.mainContainer.code(st.session_state.hvsr_data['Print_Report'])
+
     # Input data
     st.session_state.input_fig = make_input_fig()
     st.session_state.data_chart_event = st.session_state.inputTab.plotly_chart(st.session_state.input_fig,
