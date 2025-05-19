@@ -1007,16 +1007,17 @@ def update_selection_type():
 def write_to_info_tab(infoTab):
     with infoTab:
         st.markdown("# Processing Parameters Used")
+        hvsrDataList = ['params', 'hvsr_data', 'hvsr_results']
         for fun, kwargDict in funList:
             funSig = inspect.signature(fun)
             # excludeKeys = ['params', 'hvsr_data', 'hvsr_results']
             funMD = ""
             for arg in funSig.parameters.keys():
-                if arg in st.session_state.keys():
+                if arg in st.session_state.keys() and arg not in hvsrDataList:
                     funMD = funMD + f"""\n    * {arg} = {st.session_state[arg]}"""
 
             with st.expander(f"{fun.__name__}"):
-                st.write(funMD, unsafe_allow_html=True)
+                st.markdown(funMD, unsafe_allow_html=True)
 
 
 def update_from_outlier_selection():
