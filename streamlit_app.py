@@ -105,7 +105,6 @@ cp_kwargs = {}
 gr_kwargs = {}
 run_kwargs = {}
 
-#spritLogoPath = pathlib.Path(r"C:\Users\riley\LocalData\Repos\SPRIT-HVSR\sprit\resources\icon\SpRITLogo.png")
 if spritLogoPath.exists():
     st.logo(spritLogoPath, size='large')
 
@@ -1150,7 +1149,7 @@ with st.sidebar:
 
     st.header('SpRIT HVSR', divider='rainbow')
     inputDataCol, sourceCol = st.columns([0.7, 0.3])
-    datapathInput = inputDataCol.text_input("Datapath", key='input_data', 
+    datapathInput = inputDataCol.text_input("Input Data", key='input_data', 
                                         placeholder='Enter data filepath', 
                                         help="Enter a filepath to be read by obspy.read(). On the web app, a temporary copy of this file will be made.")    
     sourceCol.selectbox('Source', options=['File', 'Raw', 'Directory', "Batch"], index=0, key='source',
