@@ -342,9 +342,8 @@ if not st.session_state.initial_setup:
 # Set up tabs
 def setup_tabs(mainContainer):
     
-    resultsTab, inputTab, outlierTab, infoTab  = mainContainer.tabs(['Results', 'Data', 'Outliers', 'Info'])
+    resultsTab, inputTab, outlierTab, infoTab = mainContainer.tabs(['Results', 'Data', 'Outliers', 'Info'])
     plotReportTab, csvReportTab, strReportTab = resultsTab.tabs(['Plot', 'Results Table', 'Print Report'])
-    #tabs: st.session_state.inputTab, st.session_state.outlierTab, st.session_state.infoTab, st.session_state.resultsTab, plotReportTab, st.session_state.csvReportTab, st.session_state.strReportTab
 
     st.session_state.inputTab = inputTab
     st.session_state.outlierTab = outlierTab
@@ -489,9 +488,12 @@ def display_read_data(do_setup_tabs=False):
         st.session_state.inputTab, st.session_state.infoTab = st.session_state.mainContainer.tabs(['Raw Seismic Data', 'Info'])
     
     st.session_state.input_fig = make_input_fig()
-    st.session_state.data_chart_event = st.session_state.inputTab.plotly_chart(st.session_state.input_fig,
+    if not hasattr(st.session_state, 'data_plot'):
+        st.session_state.data_chart_event = st.session_state.inputTab.plotly_chart(st.session_state.input_fig,
                                         on_select=update_data, key='data_plot', 
                                         selection_mode='box', use_container_width=True, theme='streamlit')
+    else:
+        st.session_state.data_chart_event = st.session_state.data_plot
 
     st.session_state.inputTab.write("Select any time window with the Box Selector (see the top right of chart) to remove it from analysis.")
     st.session_state.input_selection_mode = st.session_state.inputTab.pills('Window Selection Mode', options=['Add', "Delete"], key='input_selection_toggle', 
@@ -515,7 +517,7 @@ def display_results():
     # Input data
     st.session_state.input_fig = make_input_fig()
     st.session_state.data_chart_event = st.session_state.inputTab.plotly_chart(st.session_state.input_fig,
-                                        on_select=update_data, #key='input_data_plot',
+                                        on_select=update_data, key='data_plot',
                                         selection_mode='box', use_container_width=True, theme='streamlit')
 
     st.session_state.inputTab.write("Select any time window with the Box Selector (see the top right of chart) to remove it from analysis.")
@@ -523,11 +525,10 @@ def display_results():
                                                  default='Add', on_change=update_selection_type, disabled=True, 
                                                  help='If in "Add" mode, windows for removal will be added at your selection. If "Delete" mode, these windows will be deleted. Currently only "Add" supported')
 
-
     write_to_info_tab(st.session_state.infoTab)
-    #st.session_state.inputTab.plotly_chart(st.session_state.hvsr_data['Input_Plot'], use_container_width=True)
+
     outlier_plot_in_tab()
-    #outlierEvent = outlierTab.plotly_chart(st.session_state.hvsr_data['OutlierPlot'], use_container_width=True)
+
     st.session_state.plotReportTab.plotly_chart(st.session_state.hvsr_data['HV_Plot'], use_container_width=True)
     st.session_state.csvReportTab.dataframe(data=st.session_state.hvsr_data['Table_Report'])
     st.session_state.strReportTab.code(st.session_state.hvsr_data['Print_Report'], language=None)
@@ -537,12 +538,7 @@ def display_results():
 def display_download_buttons():
     ##dlText, dlPDFReport, dlStream, dlTable, dlPlot, dlHVSR = st.session_state.mainContainer.columns([0.2, 0.16, 0.16, 0.16, 0.16, 0.16])
     dlText, dlPDFReport, dlStream, dlTable, dlPlot, dlHVSR = st.columns([0.2, 0.16, 0.16, 0.16, 0.16, 0.16])
-    ##st.session_state.dlText = dlText
-    ##st.session_state.dlPDFReport = dlPDFReport
-    ##st.session_state.dlStream = dlStream
-    ##st.session_state.dlTable = dlTable
-    ##st.session_state.dlPlot = dlPlot
-    ##st.session_state.dlHVSR = dlHVSR
+
 
     # Download Buttons
     ##st.session_state.dlText.text("Download Results: ")
@@ -554,10 +550,10 @@ def display_download_buttons():
     if hasattr(hvData, 'hvsr_id'):
         hvID = hvData['hvsr_id']
 
-    nowTimeStr = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+    nowTimeStr = datetime.datetime.now().strftime("%Y-%m-%d")
 
     # PDF Report download
-    @st.cache_data
+    #@st.cache_data
     def _convert_pdf_for_download(_hv_data):
         pdfPath = sprit_hvsr._generate_pdf_report(_hv_data, return_pdf_path=True)
         with open(pdfPath, "rb") as pdf_file:
@@ -575,7 +571,7 @@ def display_download_buttons():
                 icon=":material/summarize:")
 
     # Data Stream
-    @st.cache_data
+    #@st.cache_data
     def _convert_stream_for_download(_stream):
         strm = io.BytesIO()
         _stream.write(strm, format='MSEED')
@@ -587,12 +583,12 @@ def display_download_buttons():
         label='Data (.mseed)',
         data=streamBytes,
         #on_click=display_results,
-        file_name=f"{hvData.site}_DataStream_{hvID}_{nowTimeStr}.mseed",
+        file_name=f"{hvData.site}_Stream_{hvID}_{nowTimeStr}.mseed",
         icon=":material/graphic_eq:"
     )
 
     # Table download
-    @st.cache_data
+    #@st.cache_data
     def _convert_table_for_download(df):
         return df.to_csv().encode("utf-8")
 
@@ -609,7 +605,7 @@ def display_download_buttons():
     )
 
     # Plot
-    @st.cache_data
+    #@st.cache_data
     def _convert_plot_for_download(_HV_Plot):            
         _img = io.BytesIO()
         if st.session_state.plot_engine == 'Matplotlib':
@@ -732,6 +728,7 @@ def _get_use_array(hvsr_data, f=None, timeWindowArr=None, psdArr=None):
             hvdf.loc[hvdf[stOutEndIn | stInEndOut | bothIn | bothOut].index, 'Use'] = False
 
     return hvdf, useArrShape
+
 
 @st.cache_data
 def _generate_stream_specgram(_trace):
@@ -912,7 +909,7 @@ def update_data():
             else:
                 windows.append((b['x'][0], b['x'][1]))
 
-    # Reset the variables (but which one(s)?)
+    # Reset the variables
     st.session_state.data_chart_event = {"selection":{"points":[],
                                          "point_indices":[],
                                          'box':[],
@@ -983,7 +980,18 @@ def update_data():
     readCond2 = st.session_state.hvsr_data['processing_status']['fetch_data_status']
 
     if procCond1 and procCond2 and procCond3:
-        display_results()
+        statusMsg = 'Excluding the following window'
+        if len(utcdtWin) != 1:
+            statusMsg += 's'
+
+        statusCol, updateCol = st.columns([0.8, 0.2])
+        with statusCol.status(statusMsg):
+            st.dataframe(pd.DataFrame(utcdtWin, columns=['Window Start Time (UTC)', 'Window End Time (UTC)']))
+        updateCol.button("Rerun results statistics",
+                         on_click=update_from_data_selection,
+                         type='primary', icon=":material/update:")
+        #display_results()
+        
     elif readCond1 and readCond2:
         display_read_data(do_setup_tabs=True)
     else:
@@ -1022,16 +1030,8 @@ def update_from_outlier_selection():
     st.session_state.hvsr_data = sprit_hvsr.check_peaks(hvsr_data=st.session_state.hvsr_data, **checkPeaks_kwargs)
     st.session_state.hvsr_data = sprit_hvsr.get_report(hvsr_results=st.session_state.hvsr_data, **getRep_kwargs)
 
+    display_download_buttons()
     display_results()
-    #write_to_info_tab(infoTab)
-    
-    #inputTab.plotly_chart(st.session_state.hvsr_data['Input_Plot'], use_container_width=True)
-    #outlier_plot_in_tab()
-    #plotReportTab.plotly_chart(outlierFig, on_select=update_outlier, key='outlier_plot', use_container_width=True, theme='streamlit')
-    #csvReportTab.dataframe(data=st.session_state.hvsr_data['Table_Report'])
-    #strReportTab.text(st.session_state.hvsr_data['Print_Report'])
-
-    #st.session_state.outlierTab.write('Navigate to the Results tab to see updated results')
 
 
 def update_outlier():
@@ -1195,23 +1195,47 @@ with st.sidebar:
                         options=['Seismometer', 'Raspberry Shake', 'Tromino Yellow', 'Tromino Blue'], 
                         help='Some instruments require special inputs to read in the data correctly. If not one of the instruments listed, or if reading in an obspy-supported file directly, leave as N/A')
 
-        xCoordCol, yCoordCol, inCRSCol = st.columns([0.3333, 0.3333, 0.33333])
+        xCoordCol, yCoordCol, inCRSCol = st.columns([0.3333, 0.3333, 0.3333])
         xCoordCol.text_input('X Coordinate', help='i.e., Longitude or Easting', key='xcoord')
         yCoordCol.text_input('Y Coordinate', help='i.e., Latitude or Northing', key='ycoord')
         inCRSCol.text_input('CRS', help='By default, "EPSG:4326". Can be EPSG code or anything accepted by pyproj.CRS.from_user_input()', key='input_crs')        
         
-        zCoordCol, elevUnitCol = st.columns([0.666, 0.333])
-        zCoordCol.text_input('Z Coordinate (elevation)', help='i.e., Elevation', key='elevation')
+        zCoordCol, elevUnitCol, outCRSCol = st.columns([0.333, 0.333, 0.333])
+        zCoordCol.text_input('Z Coordinate', help='i.e., Elevation', key='elevation')
         elevUnitCol.selectbox('Elev. (Z) Unit', options=['meters', 'feet'], key='elev_unit', help='i.e., Elevation unit')
+        outCRSCol.text_input('CRS for Export', help='Can be EPSG code or anything accepted by pyproj.CRS.from_user_input()', key='output_crs')
 
+        # Date/time settings
+        dateCol, sTimeCol, eTimeCol, tzoneCol = st.columns([0.3,0.25,0.25,0.2])
+
+        dateCol.date_input('Acquisition Date', format='YYYY-MM-DD', key='acq_date')
+        sTimeCol.time_input('Start time', step=60, key='starttime')
+        eTimeCol.time_input('End time', step=60, key='endtime')
+
+        tZoneList = list(zoneinfo.available_timezones())
+        tZoneList.sort()
+        tZoneList.insert(0, "localtime")
+        tZoneList.insert(0, "US/Pacific")
+        tZoneList.insert(0, "US/Mountain")
+        tZoneList.insert(0, "US/Eastern")
+        tZoneList.insert(0, "US/Central")
+        tZoneList.insert(0, "UTC")
+        tzoneCol.selectbox('Timezone', options=tZoneList, key='tzone')
+
+        # Processing limits
         pfrDef = tuple(inspect.signature(sprit_hvsr.input_params).parameters['peak_freq_range'].default)
-        #if "peak_freq_range" not in st.session_state:
-        #    st.session_state.peak_freq_range = tuple(pfrDef)
         
         st.session_state.peak_freq_range = st.select_slider('Peak Frequency Range', options=bandVals,
                          value=pfrDef,
                          #key='peak_freq_range'
                          )
+
+        st.session_state.hvsr_band = st.select_slider('HVSR Band', options=bandVals, #key='hvsr_band',
+                        value=st.session_state.hvsr_band
+                        )
+
+        if VERBOSE:
+            print_param(PARAM2PRINT)
 
 
     st.header('Additional Settings', divider='gray')
@@ -1220,57 +1244,25 @@ with st.sidebar:
             print('Setting up sidebar expander, session state length: ', len(st.session_state.keys()))
             print_param(PARAM2PRINT)
 
-        ipSetTab, fdSetTab, azSetTab, rmnocSetTab, gpSetTab, phvsrSetTab, plotSetTab = st.tabs(['Input', 'Data', "Azimuths", "Noise", 'PPSDs', 'H/V', 'Plot'])
+        ipSetTab, fdSetTab, azSetTab, rmnocSetTab, gpSetTab, phvsrSetTab, plotSetTab = st.tabs(['Instrument', 'Data', "Azimuths", "Noise", 'PPSDs', 'H/V', 'Plot'])
+        
         #@st.experimental_dialog("Update Input Parameters", width='large')
         #def open_ip_dialog():
         with ipSetTab:
             if VERBOSE:
                 print('Setting up input tab, session state length: ', len(st.session_state.keys()))
-
-            #with st.expander('Primary Input Parameters', expanded=True):
-            #if "hvsr_band" not in st.session_state:
-            #    st.session_state.hvsr_band = [0.4, 40]
-            st.session_state.hvsr_band = st.select_slider('HVSR Band', options=bandVals, #key='hvsr_band',
-                            value=st.session_state.hvsr_band
-                            )
-
-            #st.text_input('Instrument', help='Raspberry Shake and Tromino are currently the only values with special treatment. If a filepath, can use a .inst instrument file (json format)', key='instrument')
-            #st.select_slider('HVSR Band',  value=st.session_state.hvsr_band, options=bandVals, key='hvsr_band')
-            #st.select_slider('Peak Frequency Range',  value=st.session_state.peak_freq_range, options=bandVals, key='peak_freq_range')
-
-            #with st.expander('Acquisition Date/Time'):
-            st.date_input('Acquisition Date', format='YYYY-MM-DD', key='acq_date')
-            st.time_input('Start time', step=60, key='starttime')
-            st.time_input('End time', step=60, key='endtime')
-
-            tZoneList=list(zoneinfo.available_timezones())
-            tZoneList.sort()
-            tZoneList.insert(0, "localtime")
-            tZoneList.insert(0, "US/Pacific")
-            tZoneList.insert(0, "US/Mountain")
-            tZoneList.insert(0, "US/Eastern")
-            tZoneList.insert(0, "US/Central")
-            tZoneList.insert(0, "UTC")
-            st.selectbox('Timezone', options=tZoneList, key='tzone')
-
+            
             #with st.expander('Instrument settings'):
             st.text_input("Network", placeholder='AM', key='network')
             st.text_input("Station", placeholder='RAC84', key='station')
             st.text_input("Location", placeholder='00', key='loc')
             st.text_input("Channels", placeholder='EHZ, EHE, EHN', key='channels')
-
-            #with st.expander('Location settings'):
-            #st.text_input('X Coordinate', help='i.e., Longitude or Easting', key='xcoord')
-            #st.text_input('Y Coordinate', help='i.e., Latitude or Northing', key='ycoord')
-            #st.text_input('Z Coordinate', help='i.e., Elevation', key='elevation')
-            #st.session_state.elev_unit = st.selectbox('Z Unit', options=['m', 'ft'], help='i.e., Elevation unit')
-            #st.number_input('Depth', help='i.e., Depth of measurement below ground surface (not currently used)', key='depth')
-
-            st.text_input('CRS for Export', help='Can be EPSG code or anything accepted by pyproj.CRS.from_user_input()', key='output_crs')
-            if VERBOSE:
-                print_param(PARAM2PRINT)
-
+    
             st.text_input('Metadata Filepath', help='Filepath to instrument response file', key='metapath')
+
+            #with st.expander('Primary Input Parameters', expanded=True):
+            #if "hvsr_band" not in st.session_state:
+            #    st.session_state.hvsr_band = [0.4, 40]
 
 
         #@st.experimental_dialog("Update Parameters to Fetch Data", width='large')
