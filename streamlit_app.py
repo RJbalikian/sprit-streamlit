@@ -1190,12 +1190,16 @@ with st.sidebar:
 
     with mainSettings:
 
-        siteNameCol, instCol = st.columns([0.33333, 0.33333])
+        siteNameCol, projCol = st.columns([0.5, 0.5])
         siteNameCol.text_input("Site Name", placeholder='HVSR Site', on_change=text_change, key='site')
+        projCol.text_input("Project/County Name", on_change=text_change, key='project')
         #instCol.text_input('Instrument', help='Raspberry Shake and Tromino are currently the only values with special treatment. If a filepath, can use a .inst instrument file (json format)', key='instrument')
+
+        stationCol, instCol = st.columns([0.5, 0.5])
+        stationCol.text_input("Station/Partition", placeholder='RAC84', key='station')
         instCol.selectbox('Instrument', key='instrument',
-                        options=['Seismometer', 'Raspberry Shake', 'Tromino Yellow', 'Tromino Blue'], 
-                        help='Some instruments require special inputs to read in the data correctly. If not one of the instruments listed, or if reading in an obspy-supported file directly, leave as N/A')
+                        options=['Seismometer', 'Raspberry Shake', 'Tromino Yellow', 'Tromino Blue'],
+                        help='Some instruments require special inputs to read in the data correctly. If not one of the instruments listed, or if reading in an obspy-supported file directly, leave as "Seismometer"')
 
         xCoordCol, yCoordCol, inCRSCol = st.columns([0.3333, 0.3333, 0.3333])
         xCoordCol.text_input('X Coordinate', help='i.e., Longitude or Easting', key='xcoord')
@@ -1256,7 +1260,6 @@ with st.sidebar:
             
             #with st.expander('Instrument settings'):
             st.text_input("Network", placeholder='AM', key='network')
-            st.text_input("Station", placeholder='RAC84', key='station')
             st.text_input("Location", placeholder='00', key='loc')
             st.text_input("Channels", placeholder='EHZ, EHE, EHN', key='channels')
     
