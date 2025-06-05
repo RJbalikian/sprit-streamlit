@@ -466,7 +466,7 @@ def main():
 
                         def _get_centered_text(text, just='center', add_parenth=False, size=20):
                             if len(str(text)) > size:
-                                keyText = str(text)[:size-3] = "..."
+                                keyText = str(text)[:size-3] + "..."
                             else:
                                 keyText = str(text)
                             
@@ -479,7 +479,6 @@ def main():
                                 return keyText.rjust(size)
                             elif just=='left':
                                 return keyText.ljust(size)
-                        
 
                         keyText = _get_centered_text(key)
                         valText = _get_centered_text(value, just='right')
