@@ -46,6 +46,8 @@ RESOURCE_DIR = pathlib.Path(pkg_resources.resource_filename(__name__, 'resources
 SAMPLE_DATA_DIR = RESOURCE_DIR.joinpath('sample_data')
 SETTINGS_DIR = RESOURCE_DIR.joinpath('settings')
 
+DEFAULT_BAND = sprit_hvsr.DEFAULT_BAND
+
 spritLogoPath = RESOURCE_DIR.joinpath("icon").joinpath("SpRITLogo.png")
 
 if VERBOSE:
@@ -435,10 +437,10 @@ def main():
             excludedKeys = ['plot_engine', 'plot_input_stream', 'show_plot', 'verbose', 'show_outlier_plot']
             NOWTIME = datetime.datetime.now()
             secondaryDefaults = {'acq_date': datetime.date(NOWTIME.year, NOWTIME.month, NOWTIME.day),
-                                    'hvsr_band':(0.1, 50), 'use_hv_curves':True,
+                                    'hvsr_band':DEFAULT_BAND, 'use_hv_curves':True,
                                     'starttime':datetime.time(0,0,0),
                                     'endtime':datetime.time(23, 59, 0),
-                                    'peak_freq_range':(0.1, 50),
+                                    'peak_freq_range':DEFAULT_BAND,
                                     'stalta_thresh':(8, 16),
                                     'period_limits':(0.02, 10),
                                     'remove_method':['None'],
