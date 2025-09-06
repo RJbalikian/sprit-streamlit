@@ -307,7 +307,7 @@ def main():
 
             # Other updates
             st.session_state.azimuth_unit = run_kwargs['azimuth_unit'] = '°'
-            st.session_state.plot_engine = run_kwargs['plot_engine'] = "Plotly"
+            st.session_state.plot_engine = run_kwargs['plot_engine'] = "Matplotlib"
             
 
             # Horizontal_method
@@ -435,7 +435,7 @@ def main():
             excludedKeys = ['plot_engine', 'plot_input_stream', 'show_plot', 'verbose', 'show_outlier_plot']
             NOWTIME = datetime.datetime.now()
             secondaryDefaults = {'acq_date': datetime.date(NOWTIME.year, NOWTIME.month, NOWTIME.day),
-                                    'hvsr_band':(0.1, 50), 'use_hv_curve':True,
+                                    'hvsr_band':(0.1, 50), 'use_hv_curves':True,
                                     'starttime':datetime.time(0,0,0),
                                     'endtime':datetime.time(23, 59, 0),
                                     'peak_freq_range':(0.1, 50),
@@ -554,6 +554,14 @@ def main():
         display_read_data(do_setup_tabs=False)
 
 
+    def do_interactive_display():
+        if st.session_state.interactive_display:
+            st.session_state.plot_engine = "Plotly"
+        else:
+            st.session_state.plot_engine = "Matplotlib"
+
+
+
     def display_read_data(do_setup_tabs=False):
         
         if do_setup_tabs:
@@ -601,6 +609,9 @@ def main():
         # Set up container for output data
         setup_main_container(do_setup_tabs=True)
         st.toast('Displaying results')
+
+        if st.session_state.interactive_display:
+           st.session_state.plot_engine = "Plotly"
         
         if st.session_state.plot_engine == "Plotly":
             # Print main results right away if taking time to plot others
@@ -640,7 +651,7 @@ def main():
                                                 on_change=display_buttons_and_results)
 
             if st.session_state.interactive_display:
-                st.session_state.plotReportTab.plotly_chart(st.session_state.hvsr_data['HV_Plot'], use_container_width=True)
+                st.session_state.plotReportTab.plotly_chart(st.session_state.hvsr_data['Plot_Report'], use_container_width=True)
             else:
                 st.session_state.plotReportTab.html(st.session_state.hvsr_data["HTML_Report"])
 
@@ -660,10 +671,10 @@ def main():
             outlier_plot_in_tab()
 
             if st.session_state.interactive_display:
-                st.session_state.plotReportTab.pyplot(st.session_state.hvsr_data['HV_Plot'], use_container_width=True)
+                st.session_state.plotReportTab.pyplot(st.session_state.hvsr_data['Plot_Report'], use_container_width=True)
             else:
                 st.session_state.plotReportTab.html(st.session_state.hvsr_data["HTML_Report"])
-                #st.session_state.plotReportTab.pyplot(st.session_state.hvsr_data['HV_Plot'], use_container_width=True)
+                #st.session_state.plotReportTab.pyplot(st.session_state.hvsr_data['Plot_Report'], use_container_width=True)
             st.session_state.csvReportTab.dataframe(data=st.session_state.hvsr_data['Table_Report'])
             st.session_state.strReportTab.code(st.session_state.hvsr_data['Print_Report'], language=None)
 
@@ -748,7 +759,7 @@ def main():
             
             return _img
 
-        img = _convert_plot_for_download(hvData['HV_Plot'])
+        img = _convert_plot_for_download(hvData['Plot_Report'])
 
         ##st.session_state.dlPlot.download_button(
         dlPlot.download_button(
@@ -774,8 +785,9 @@ def main():
             dlHVSR.download_button(
                 label="Pickled (.hvsr)",
                 data=hvsrPickle,
-                file_name=f"{hvData.site}_Pickled_{hvID}_{nowTimeStr}.hvsr",
+                file_name=f"{hvData.site}_HVSRData_{hvID}_{nowTimeStr}_pickled_app.hvsr",
                 #on_click=display_results,
+                mime='application/octet-stream',
                 icon=":material/database:")
         except Exception as e:
             print(e)
@@ -784,7 +796,6 @@ def main():
                 label=".hvsr not available",
                 data='HVSR Data ',
                 disabled=True,
-                #on_click=display_results,
                 icon=":material/database:")
 
 
@@ -1240,7 +1251,7 @@ def main():
 
         procCond1 = st.session_state.hvsr_data['processing_status']['process_hvsr_status']
         procCond2 = st.session_state.hvsr_data['processing_status']['overall_status']
-        procCond3 = has_attributes(st.session_state.hvsr_data, "HV_Plot", "Print_Report", "Table_Report")
+        procCond3 = has_attributes(st.session_state.hvsr_data, "Plot_Report", "Print_Report", "Table_Report")
 
         readCond1 = st.session_state.hvsr_data['processing_status']['input_params_status']
         readCond2 = st.session_state.hvsr_data['processing_status']['fetch_data_status']
@@ -1512,6 +1523,7 @@ def main():
                             )
 
             st.toggle(label='Display interactive charts (slower)', value=False, key='interactive_display',
+                      on_change=do_interactive_display,
                       help="Whether to display interactive charts for the data, outliers, and results charts. Interactive charts take longer to display, but allow graphical editing of the data.")
 
             if VERBOSE:
@@ -1537,7 +1549,7 @@ def main():
                 st.text_input("Location", placeholder='00', key='loc')
                 st.text_input("Channels", placeholder='EHZ, EHE, EHN', key='channels')
         
-                st.text_input('Metadata Filepath', help='Filepath to instrument response file', key='metapath')
+                st.text_input('Metadata Filepath', help='Filepath to instrument response file', key='metadata')
 
                 #with st.expander('Primary Input Parameters', expanded=True):
                 #if "hvsr_band" not in st.session_state:
@@ -1715,7 +1727,7 @@ def main():
                     st.radio('Threshold type', horizontal=True, disabled=outlierCurveDisabled, options=['Percentile', 'Value'], key='threshRadio')
                     st.session_state.use_percentile = st.session_state.threshRadio=='Percentile'
                     st.radio('Threshold curve', horizontal=True, disabled=outlierCurveDisabled, options=['HV Curve', 'Component Curves'], key='curveRadio')
-                    st.session_state.use_hv_curve = (st.session_state.curveRadio=='HV Curve')
+                    st.session_state.use_hv_curves = (st.session_state.curveRadio=='HV Curve')
 
 
 
@@ -1765,7 +1777,7 @@ def main():
                 st.selectbox("Curve Smoothing", options=['None', 'Savgoy Filter', 'Konno Ohmachi', "Proportional", "Constant"], index=2, key='freq_smooth')
                 st.select_slider("Curve Smoothing Parameter", options=np.arange(1000).tolist(), value=40, key='f_smooth_width')
                 st.select_slider("Resample", options=rList, value=1000, key='resample')
-                st.select_slider('Outlier Curve Removal', options=rList[:100], key='outlier_curve_rmse_percentile')
+                st.select_slider('Outlier Curve Removal', options=rList[:100], key='outlier_curve_percentile_threshold')
                 if VERBOSE:
                     print_param(PARAM2PRINT)
 
