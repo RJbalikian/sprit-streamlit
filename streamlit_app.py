@@ -3,12 +3,12 @@
 import base64
 import copy
 import datetime
+import importlib
 import inspect
 import io
 import os
 import pathlib
 import pickle
-import pkg_resources
 import sys
 import tempfile
 import zoneinfo
@@ -41,7 +41,7 @@ except Exception:
     
 VERBOSE = False
 
-RESOURCE_DIR = pathlib.Path(pkg_resources.resource_filename(__name__, 'resources'))
+RESOURCE_DIR = pathlib.Path(str(importlib.resources.files('sprit'))).joinpath('resources')
 SAMPLE_DATA_DIR = RESOURCE_DIR.joinpath('sample_data')
 SETTINGS_DIR = RESOURCE_DIR.joinpath('settings')
 
@@ -341,7 +341,7 @@ def main():
     def check_if_default():
         if len(st.session_state.keys()) > 0:
             print('Checking defaults, session state length: ', len(st.session_state.keys()))
-            print_param(param2print)
+            print_param(PARAM2PRINT)
 
 
     if VERBOSE:
@@ -1860,7 +1860,7 @@ def main():
         if VERBOSE:
             print('Done setting up sidebar, session state length: ', len(st.session_state.keys()))
             print('Done setting up everything (end of main), session state length: ', len(st.session_state.keys()))
-            print_param(param2print)
+            print_param(PARAM2PRINT)
 
 if __name__ == "__main__":
     main()
