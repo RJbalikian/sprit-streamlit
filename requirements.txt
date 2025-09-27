@@ -8,6 +8,5 @@ plotly
 nbformat
 streamlit
 kaleido
-pycairo<=1.27.0
 anywidget
 sprit>=2.0
