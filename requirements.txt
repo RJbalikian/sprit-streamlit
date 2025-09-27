@@ -7,6 +7,6 @@ pyproj
 plotly
 nbformat
 streamlit
-kaleido<1.0.0
+kaleido
 anywidget
 sprit>=2.0
