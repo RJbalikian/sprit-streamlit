@@ -157,7 +157,6 @@ def main():
     initial_setup_fun('tabs_setup', False)
     initial_setup_fun('mainContain_setup', False)
 
-
     def setup_session_state():
         if st.session_state.initial_setup:
             # "Splash screen" (only shows at initial startup)
@@ -218,6 +217,8 @@ def main():
             if VERBOSE:
                 print('Start sig loop, session state length: ', len(st.session_state.keys()))
                 print_param(PARAM2PRINT)
+
+            st.session_state.session_log = f'\n ## Application started at {datetime.datetime.now()}\n\n'
 
             # Get all function defaults
             for fun, funDict in funList:
@@ -339,6 +340,23 @@ def main():
             st.session_state['NewSessionState'] = copy.copy(st.session_state)
 
 
+    def update_session_log(message=''):
+        if not hasattr(st.session_state, 'session_log'):
+            st.session_state.session_log='# Log'
+        newLogEntry = f'\n[{datetime.datetime.now()}]  '
+        if message == '':
+            newLogEntry += '<action taken. message not specified>'
+        else:
+            newLogEntry += message
+        newLogEntry += '\n'
+        st.session_state.session_log += newLogEntry
+
+
+    def show_logs():
+        st.info(st.session_state.session_log, icon=':material/overview:')
+            
+
+
     def check_if_default():
         if len(st.session_state.keys()) > 0:
             print('Checking defaults, session state length: ', len(st.session_state.keys()))
@@ -365,6 +383,7 @@ def main():
             print(file.name)
         st.session_state.input_data = path.as_posix()
 
+        update_session_log(f'File uploaded: {file}\n\t Stored at {path.as_posix})')
 
     # Set up main container
     def setup_main_container(do_setup_tabs=False):
@@ -373,7 +392,7 @@ def main():
 
         if do_setup_tabs:
             setup_tabs(mainContainer)
-        
+
         st.session_state.mainContain_setup = True
 
 
@@ -384,12 +403,14 @@ def main():
     # Set up tabs
     def setup_tabs(mainContainer):
         
-        resultsTab, inputTab, outlierTab, infoTab = mainContainer.tabs(['Results', 'Data', 'Outliers', 'Info'])
+        resultsTab, inputTab, outlierTab, infoTab, logsTab = mainContainer.tabs(['Results', 'Data', 'Outliers', 'Info', 'Logs'])
         plotReportTab, csvReportTab, strReportTab = resultsTab.tabs(['Summary/Plot', 'Results Table', 'Print Report'])
 
         st.session_state.inputTab = inputTab
         st.session_state.outlierTab = outlierTab
         st.session_state.infoTab = infoTab
+        st.session_state.logTab = logsTab
+
         st.session_state.resultsTab = resultsTab
         st.session_state.plotReportTab = plotReportTab
         st.session_state.csvReportTab = csvReportTab
@@ -399,6 +420,7 @@ def main():
 
 
     def on_run_data():
+        update_session_log("Started data processing")
         # Runs sample data if nothing specified
         if st.session_state.input_data == '':
             st.session_state.input_data = 'sample'
@@ -513,10 +535,18 @@ def main():
                 spinnerText = spinnerText.replace("\n\t", tableHeader+tableHeader2, 1)
 
                 spinnerDF = pd.DataFrame(spinnerDFList, columns=['Parameter', "Value Selected", "Selected value type", 'Default Value', 'Default value type'])
-            print("SRUN", srun)
+            
+            inputData = st.session_state.input_data
+            if hasattr(st.session_state, 'data_ingested') and st.session_state.data_ingested:
+                inputData = st.session_state.stream_edited
+
+            SRUNText = '\n\n    -'.join([f"{str(k).ljust(25)} : {v}" for k, v in srun.items()])
+            update_session_log(f"Processing parameters:\n\n    -{SRUNText}")
+
             with st.spinner(spinnerText, show_time=True):
-                st.session_state.hvsr_data = sprit_hvsr.run(input_data=st.session_state.input_data, **srun)
-        
+                st.session_state.hvsr_data = sprit_hvsr.run(input_data=inputData, **srun)
+            update_session_log('Processing Complete')
+
         st.balloons()
 
         st.session_state.stream = st.session_state.hvsr_data['stream']
@@ -527,9 +557,11 @@ def main():
         st.toast('Displaying results (download available)')
         display_results()
         st.session_state.prev_datapath = st.session_state.input_data
-
+        update_session_log("Processed data displayed")
+        st.session_state.logTab.markdown(st.session_state.session_log)
 
     def on_read_data():
+        update_session_log(f"Started data read: {st.session_state.input_data}")
         if 'read_button' not in st.session_state.keys() or not st.session_state.read_button:
             return
 
@@ -538,7 +570,7 @@ def main():
             st.session_state.input_data = 'sample'
 
         st.session_state.mainContainer = st.container()
-        st.session_state.inputTab, st.session_state.infoTab = st.session_state.mainContainer.tabs(['Raw Seismic Data', 'Info'])
+        st.session_state.inputTab, st.session_state.infoTab, st.session_state.logTab = st.session_state.mainContainer.tabs(['Raw Seismic Data', 'Info', 'Logs'])
 
         if st.session_state.input_data != '':
             srun = {}
@@ -564,18 +596,22 @@ def main():
         else:
             st.session_state.stream_edited = st.session_state.hvsr_data.stream.copy()
 
+        update_session_log(f"Data ingested: \n{str(st.session_state.hvsr_data.stream).replace('Stream:', 'Stream:\n\n\t').replace('samples', 'samples\n\n\t')}")
         display_read_data(do_setup_tabs=False)
-
+        st.session_state.data_ingested = True
+        update_session_log("Ingested data displayed")
+        st.session_state.logTab.markdown(st.session_state.session_log)
 
     def do_interactive_display():
         if st.session_state.interactive_display:
             st.session_state.plot_engine = "Plotly"
+            update_session_log("Interactive plots activated (now using plotly)")
         else:
             st.session_state.plot_engine = "Matplotlib"
+            update_session_log("Interactive plots deactivated (now using matplotlib)")
 
 
     def display_read_data(do_setup_tabs=False):
-        
         if do_setup_tabs:
             st.session_state.mainContainer = st.container()
             st.session_state.inputTab, st.session_state.infoTab = st.session_state.mainContainer.tabs(['Raw Seismic Data', 'Info'])
@@ -589,17 +625,14 @@ def main():
                 st.session_state.data_chart_event = st.session_state.inputTab.pyplot(st.session_state.input_fig, width='stretch')
                 st.session_state.data_plot = None
         else:
-            if not hasattr(st.session_state, 'data_plot'):
-                st.session_state.data_chart_event = st.session_state.inputTab.plotly_chart(st.session_state.input_fig,
+            st.session_state.data_chart_event = st.session_state.inputTab.plotly_chart(st.session_state.input_fig,
                                                 on_select=update_data, key='data_plot', 
                                                 selection_mode='box', width='stretch', theme='streamlit')
-            else:
-                st.session_state.data_chart_event = st.session_state.data_plot
 
             st.session_state.inputTab.write("Select any time window with the Box Selector (see the top right of chart) to remove it from analysis.")
-            st.session_state.input_selection_mode = st.session_state.inputTab.pills('Window Selection Mode', options=['Add', "Delete"], key='input_selection_toggle',
-                                                        default='Add', on_change=update_selection_type, disabled=True,
-                                                        help='If in "Add" mode, windows for removal will be added at your selection. If "Delete" mode, these windows will be deleted. Currently only "Add" supported')
+            #st.session_state.input_selection_mode = st.session_state.inputTab.pills('Window Selection Mode', options=['Add', "Delete"], key='input_selection_toggle',
+            #                                            default='Add', on_change=update_selection_type, disabled=True,
+            #                                            help='If in "Add" mode, windows for removal will be added at your selection. If "Delete" mode, these windows will be deleted. Currently only "Add" supported')
         
 
         # Print information about the data to Info tab
@@ -640,9 +673,9 @@ def main():
                                                     selection_mode='box', width='stretch', theme='streamlit')
 
                 st.session_state.inputTab.write("Select any time window with the Box Selector (see the top right of chart) to remove it from analysis.")
-                st.session_state.input_selection_mode = st.session_state.inputTab.pills('Window Selection Mode', options=['Add', "Delete"], key='input_selection_toggle',
-                                                        default='Add', on_change=update_selection_type, disabled=True, 
-                                                        help='If in "Add" mode, windows for removal will be added at your selection. If "Delete" mode, these windows will be deleted. Currently only "Add" supported')
+                #st.session_state.input_selection_mode = st.session_state.inputTab.pills('Window Selection Mode', options=['Add', "Delete"], key='input_selection_toggle',
+                #                                        default='Add', on_change=update_selection_type, disabled=True, 
+                #                                        help='If in "Add" mode, windows for removal will be added at your selection. If "Delete" mode, these windows will be deleted. Currently only "Add" supported')
             
             else:
                 st.session_state.inputTab.toggle(label='Display input data stream and windows used',
@@ -822,6 +855,7 @@ def main():
     def on_reset():
         st.toast("Session state cleared")
         st.session_state = st.session_state['NewSessionState']
+        update_session_log("Session state cleared")
 
 
     def _get_use_array(hvsr_data, f=None, timeWindowArr=None, psdArr=None):
@@ -1192,6 +1226,7 @@ def main():
 
 
     def update_data():
+        update_session_log("Manually removed data times used for processing/analysis")
         st.session_state.data_chart_event = st.session_state.data_plot
         specKey = 'Z'
         hvsrBand = st.session_state.hvsr_data.hvsr_band
@@ -1234,9 +1269,9 @@ def main():
             st.session_state.hvsr_data['x_windows_out'].append(currUTCWin)
 
             # Trim data with gap in the middle where we remvoed data
-            if st.session_state.input_selection_mode == 'Add':
-                stream1.trim(starttime=stream1[0].stats.starttime, endtime=currUTCWin[0])
-                stream2.trim(starttime=currUTCWin[1], endtime=stream2[0].stats.endtime)
+            #if st.session_state.input_selection_mode == 'Add':
+            stream1.trim(starttime=stream1[0].stats.starttime, endtime=currUTCWin[0])
+            stream2.trim(starttime=currUTCWin[1], endtime=stream2[0].stats.endtime)
 
             # Merge data back
             newStream = (stream1 + stream2).merge()
@@ -1298,7 +1333,8 @@ def main():
 
 
     def update_selection_type():
-        st.session_state.input_selection_mode = st.session_state.input_selection_toggle
+        #st.session_state.input_selection_mode = st.session_state.input_selection_toggle
+        pass
 
 
     def write_to_info_tab(infoTab):
@@ -1334,6 +1370,7 @@ def main():
 
 
     def update_outlier():
+        update_session_log("Manually selected curves to remove from H/V analysis")
         hvDF = st.session_state.hvsr_data['hvsr_windows_df']
         
         st.session_state.outlier_chart_event = st.session_state.outlier_plot
@@ -1488,6 +1525,10 @@ def main():
             print('Done setting up bottom container, session state length: ', len(st.session_state.keys()))
             print_param(PARAM2PRINT)
 
+        st.toggle(label='Display interactive charts (slower)', value=False, key='interactive_display',
+                    on_change=do_interactive_display,
+                    help="Whether to display interactive charts for the data, outliers, and results charts. Interactive charts take longer to display, but allow graphical editing of the data.")
+
         st.header('Settings')
         mainSettings = st.container()
 
@@ -1542,10 +1583,6 @@ def main():
             st.session_state.hvsr_band = st.select_slider('HVSR Band', options=bandVals, #key='hvsr_band',
                             value=st.session_state.hvsr_band
                             )
-
-            st.toggle(label='Display interactive charts (slower)', value=False, key='interactive_display',
-                      on_change=do_interactive_display,
-                      help="Whether to display interactive charts for the data, outliers, and results charts. Interactive charts take longer to display, but allow graphical editing of the data.")
 
             if VERBOSE:
                 print_param(PARAM2PRINT)
@@ -1877,6 +1914,8 @@ def main():
                 if VERBOSE:
                     print_param(PARAM2PRINT)
 
+        st.button('View Logs',key='view_logs', help='Click to view logs on the main screen, or select the Logs tab if available',
+                  on_click=show_logs)
         if VERBOSE:
             print('Done setting up sidebar, session state length: ', len(st.session_state.keys()))
             print('Done setting up everything (end of main), session state length: ', len(st.session_state.keys()))
