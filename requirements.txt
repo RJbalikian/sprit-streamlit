@@ -6,6 +6,7 @@ numpy
 pyproj
 plotly
 nbformat
+rioxarray
 streamlit
 kaleido
 anywidget
