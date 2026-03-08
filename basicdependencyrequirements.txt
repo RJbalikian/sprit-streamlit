@@ -1,0 +1,15 @@
+obspy
+scipy
+matplotlib
+pandas
+numpy
+pyproj
+plotly
+nbformat
+pkg_resources
+rioxarray
+streamlit
+kaleido
+anywidget
+altair<5
+sprit
