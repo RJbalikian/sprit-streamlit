@@ -103,7 +103,7 @@ smmap==5.0.2
 sprit==3.7
 sqlalchemy==1.4.54
 stack-data==0.6.3
-streamlit==1.19.0
+streamlit>1.55
 svglib==1.6.0
 tinycss2==1.5.1
 toml==0.10.2
