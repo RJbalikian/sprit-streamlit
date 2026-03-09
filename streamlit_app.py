@@ -564,6 +564,7 @@ def main():
         update_session_log("Processed data displayed")
         st.session_state.logTab.markdown(st.session_state.session_log)
 
+
     def on_read_data():
         update_session_log(f"Started data read: {st.session_state.input_data}")
         if 'read_button' not in st.session_state.keys() or not st.session_state.read_button:
@@ -605,6 +606,7 @@ def main():
         st.session_state.data_ingested = True
         update_session_log("Ingested data displayed")
         st.session_state.logTab.markdown(st.session_state.session_log)
+
 
     def do_interactive_display():
         if st.session_state.interactive_display:
@@ -731,7 +733,7 @@ def main():
     @st.fragment
     def display_download_buttons():
         ##dlText, dlPDFReport, dlStream, dlTable, dlPlot, dlHVSR = st.session_state.mainContainer.columns([0.2, 0.16, 0.16, 0.16, 0.16, 0.16])
-        dlText, dlStream, dlHVSR, dlPDFReport, dlTable, dlPlot = st.columns([0.2, 0.16, 0.16, 0.16, 0.16, 0.16])
+        dlText, dlStream, dlJSON, dlHVSR, dlPDFReport, dlTable, dlPlot = st.columns([0.2, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1])
         st.divider()
 
         # Download Buttons
@@ -822,6 +824,21 @@ def main():
             )
 
 
+        # JSON File
+        def _convert_json_for_download(hv_data):
+            return hv_data.to_json()
+
+        jsonText = _convert_json_for_download(hvData)
+
+        dlJSON.download_button(
+            label="JSON",
+            data=jsonText,
+            file_name=f"{hvData.site}_JSON_{hvID}_{nowTimeStr}.json",
+            mime="application/json",
+            icon=":material/data_object:"
+            )
+
+
         # HVSR File
         try:
             #@st.cache_data
@@ -840,9 +857,9 @@ def main():
 
             ##st.session_state.dlHVSR.download_button(
             dlHVSR.download_button(
-                label="Pickled (.hvsr)",
+                label="Pickled",
                 data=hvsrPickle,
-                file_name=f"{hvData.site}_HVSRData_{hvID}_{nowTimeStr}_pickled_app.hvsr",
+                file_name=f"{hvData.site}_HVSRData_{hvID}_{nowTimeStr}_pickled_fromApp.hvsr",
                 #on_click=display_results,
                 mime='application/octet-stream',
                 icon=":material/database:")
@@ -1344,7 +1361,7 @@ def main():
     def write_to_info_tab(infoTab):
         with infoTab:
             st.markdown("# Processing Parameters Used")
-            hvsrDataList = ['params', 'hvsr_data', 'hvsr_results']
+            hvsrDataList = ['params', 'input_paramters', 'hvsr_data', 'hvsr_results']
             for fun, kwargDict in funList:
                 funSig = inspect.signature(fun)
                 # excludeKeys = ['params', 'hvsr_data', 'hvsr_results']
@@ -1505,6 +1522,7 @@ def main():
             import rioxarray as rxr
         except:
             st.info("You must have rioxarray installed (pip install rioxarray) in your python environment to use GMRT elevation data.")
+            st.session_state.ZTB_disabled = True
             return
 
         response = requests.get(url=GMRT_URL)
@@ -1596,8 +1614,8 @@ def main():
             inCRSCol, outCRSCol, elevUnitCol  = st.columns([0.3, 0.3, 0.3])
             xCoordCol.text_input('X Coordinate', help='i.e., Longitude or Easting', key='xcoord')
             yCoordCol.text_input('Y Coordinate', help='i.e., Latitude or Northing', key='ycoord')
-            ZTB_disabled = st.session_state.elev_wms_check       
-            zCoordCol.text_input('Z Coordinate', help='i.e., Elevation', key='elevation', disabled=ZTB_disabled)
+            st.session_state.ZTB_disabled = st.session_state.elev_wms_check       
+            zCoordCol.text_input('Z Coordinate', help='i.e., Elevation', key='elevation', disabled=st.session_state.ZTB_disabled)
 
 
      
