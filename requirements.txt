@@ -101,7 +101,7 @@ shapely==2.1.2
 simplejson==3.20.2
 six==1.17.0
 smmap==5.0.2
-sprit==3.7
+sprit
 sqlalchemy==1.4.54
 stack-data==0.6.3
 streamlit==1.55.0

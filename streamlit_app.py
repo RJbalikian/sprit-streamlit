@@ -440,8 +440,7 @@ def main():
                                 srun[key] = value
                                 print("ADDED", key, value)
                         else:
-                            srun[key] = value                           
-            
+                            srun[key] = value
             if key == 'plot_engine':
                 srun[key] = value
 
@@ -485,8 +484,8 @@ def main():
                                  'show_plot_report':False,
                                  'elev_unit':'m',
                                  'plot_type':'HVSR p ann C+ p ann Spec p',
-                                 'suppress_report_outputs':True
-
+                                 'suppress_report_outputs':True,
+                                 'resample':1000
                                   }
             
             nonDefaultParams = False
