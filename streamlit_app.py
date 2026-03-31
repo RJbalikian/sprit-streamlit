@@ -9,10 +9,11 @@ import io
 import os
 import pathlib
 import pickle
+import requests
 import sys
 import tempfile
 import zoneinfo
-
+        
 import matplotlib
 import numpy as np
 import pandas as pd
@@ -22,11 +23,11 @@ from plotly.express import timeline as pxTimeline
 from plotly.graph_objects import Heatmap as goHeatmap
 from plotly.graph_objs._figurewidget import FigureWidget
 from plotly.subplots import make_subplots
+import pyproj
 import streamlit as st
 from obspy import UTCDateTime
 from obspy.signal.spectral_estimation import PPSD
 from scipy import signal
-
 
 try:
     import sprit
@@ -38,7 +39,7 @@ except Exception:
     import sprit
     from sprit import sprit_hvsr
     from sprit import sprit_plot
-    
+
 VERBOSE = False
 
 RESOURCE_DIR = pathlib.Path(str(importlib.resources.files('sprit'))).joinpath('resources')
@@ -48,6 +49,8 @@ SETTINGS_DIR = RESOURCE_DIR.joinpath('settings')
 DEFAULT_BAND_LIST = list(sprit_hvsr.DEFAULT_BAND)
 
 spritLogoPath = RESOURCE_DIR.joinpath("icon").joinpath("SpRITLogo.png")
+
+GMRT_BASE_URL = r"https://www.gmrt.org:443/services/GridServer?minlongitude&maxlongitude%2C%20&minlatitude&maxlatitude&format=geotiff&resolution=default&layer=topo"
 
 if VERBOSE:
     print('Start of file, session state length: ', len(st.session_state.keys()))
@@ -74,7 +77,7 @@ def main():
         icon = spritLogoPath
     else:
         icon = ":material/electric_bolt:"
-        
+
     if 'sprit' in sys.modules and hasattr(sprit, '__version__'):
         spritversion = sprit.__version__
     else:
@@ -114,7 +117,7 @@ def main():
     bandVals = [0.05, 0.06, 0.07, 0.08, 0.09,
                 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9,
                 1, 2, 3, 4, 5, 6, 7, 8, 9,
-                10, 20, 30, 40, 50, 60, 70, 80, 90, 100]
+                10, 16, 20, 30, 32, 40, 50, 60, 64, 70, 80, 90, 100]
 
     # SETUP KWARGS
     if VERBOSE:
@@ -156,7 +159,6 @@ def main():
     initial_setup_fun('initial_setup', True, False)
     initial_setup_fun('tabs_setup', False)
     initial_setup_fun('mainContain_setup', False)
-
 
     def setup_session_state():
         if st.session_state.initial_setup:
@@ -218,6 +220,8 @@ def main():
             if VERBOSE:
                 print('Start sig loop, session state length: ', len(st.session_state.keys()))
                 print_param(PARAM2PRINT)
+
+            st.session_state.session_log = f'\n ## Application started at {datetime.datetime.now()}\n\n'
 
             # Get all function defaults
             for fun, funDict in funList:
@@ -291,6 +295,7 @@ def main():
                 print_param(PARAM2PRINT)
 
             # Case matching
+            st.session_state.outlier_method = run_kwargs['outlier_method'] = st.session_state.outlier_method.title()
             st.session_state.data_export_format = run_kwargs['data_export_format'] = st.session_state.data_export_format.upper()
             st.session_state.detrend = run_kwargs['detrend'] = st.session_state.detrend.title()
             st.session_state.azimuth_type = run_kwargs['azimuth_type'] = st.session_state.azimuth_type.title()
@@ -306,7 +311,7 @@ def main():
             else:
                 st.session_state.remove_method = run_kwargs['remove_method'] = st.session_state.remove_method.title()
 
-            # Other updates
+            # Other updates for streamlit specifically
             st.session_state.azimuth_unit = run_kwargs['azimuth_unit'] = '°'
             st.session_state.plot_engine = run_kwargs['plot_engine'] = "Matplotlib"
             
@@ -338,6 +343,23 @@ def main():
             st.session_state['NewSessionState'] = copy.copy(st.session_state)
 
 
+    def update_session_log(message=''):
+        if not hasattr(st.session_state, 'session_log'):
+            st.session_state.session_log='# Log'
+        newLogEntry = f'\n[{datetime.datetime.now()}]  '
+        if message == '':
+            newLogEntry += '<action taken. message not specified>'
+        else:
+            newLogEntry += message
+        newLogEntry += '\n'
+        st.session_state.session_log += newLogEntry
+
+
+    def show_logs():
+        st.info(st.session_state.session_log, icon=':material/overview:')
+            
+
+
     def check_if_default():
         if len(st.session_state.keys()) > 0:
             print('Checking defaults, session state length: ', len(st.session_state.keys()))
@@ -364,6 +386,7 @@ def main():
             print(file.name)
         st.session_state.input_data = path.as_posix()
 
+        update_session_log(f'File uploaded: {file}\n\t Stored at {path.as_posix})')
 
     # Set up main container
     def setup_main_container(do_setup_tabs=False):
@@ -372,7 +395,7 @@ def main():
 
         if do_setup_tabs:
             setup_tabs(mainContainer)
-        
+
         st.session_state.mainContain_setup = True
 
 
@@ -383,12 +406,14 @@ def main():
     # Set up tabs
     def setup_tabs(mainContainer):
         
-        resultsTab, inputTab, outlierTab, infoTab = mainContainer.tabs(['Results', 'Data', 'Outliers', 'Info'])
+        resultsTab, inputTab, outlierTab, infoTab, logsTab = mainContainer.tabs(['Results', 'Data', 'Outliers', 'Info', 'Logs'])
         plotReportTab, csvReportTab, strReportTab = resultsTab.tabs(['Summary/Plot', 'Results Table', 'Print Report'])
 
         st.session_state.inputTab = inputTab
         st.session_state.outlierTab = outlierTab
         st.session_state.infoTab = infoTab
+        st.session_state.logTab = logsTab
+
         st.session_state.resultsTab = resultsTab
         st.session_state.plotReportTab = plotReportTab
         st.session_state.csvReportTab = csvReportTab
@@ -398,6 +423,7 @@ def main():
 
 
     def on_run_data():
+        update_session_log("Started data processing")
         # Runs sample data if nothing specified
         if st.session_state.input_data == '':
             st.session_state.input_data = 'sample'
@@ -408,15 +434,23 @@ def main():
             if key in st.session_state.run_kws:
                 if value != st.session_state.default_params[key]:
                     if str(value) != str(st.session_state.default_params[key]):
-                        srun[key] = value
+                        if isinstance(value, (tuple, list)):
+                            if tuple(value) != tuple(st.session_state.default_params[key]):
+                                srun[key] = value
+                                print("ADDED", key, value)
+                        else:
+                            srun[key] = value                           
             
             if key == 'plot_engine':
                 srun[key] = value
-                
+
         # Get plots all right
         #srun['plot_engine'] = 'matplotlib'
         srun['plot_input_stream'] = True
-        srun['show_outlier_plot'] = False
+        for rocK in inspect.signature(sprit_hvsr.remove_outlier_curves).parameters.keys():
+            if rocK in srun and rocK != 'plot_engine':
+                srun['show_outlier_plot'] = False
+                break        
         srun['show_plot'] = False
         srun['verbose'] = False #True
 
@@ -436,7 +470,7 @@ def main():
             excludedKeys = ['plot_engine', 'plot_input_stream', 'show_plot', 'verbose', 'show_outlier_plot']
             NOWTIME = datetime.datetime.now()
             secondaryDefaults = {'acq_date': datetime.date(NOWTIME.year, NOWTIME.month, NOWTIME.day),
-                                 'hvsr_band':tuple(DEFAULT_BAND_LIST), 'use_hv_curves':True,
+                                 'hvsr_band': tuple(DEFAULT_BAND_LIST), 'use_hv_curves': True,
                                  'starttime':datetime.time(0,0,0),
                                  'endtime':datetime.time(23, 59, 0),
                                  'peak_freq_range':tuple(DEFAULT_BAND_LIST),
@@ -446,12 +480,13 @@ def main():
                                  'report_export_format':None,
                                  'report_formats':  ['print', 'table', 'plot', 'html', 'pdf'] ,
                                  'show_pdf_report':False,
-                                 'show_print_report':True,
-                                 'show_plot_report':False,
-                                 'elev_unit':'m',
-                                 'plot_type':'HVSR p ann C+ p ann Spec p',
-                                 'suppress_report_outputs':True
-                                    }
+                                 'show_print_report': True,
+                                 'show_plot_report': False,
+                                 'elev_unit': 'm',
+                                 'plot_type': 'HVSR p ann C+ p ann Spec p',
+                                 'suppress_report_outputs': True,
+                                 'resample': 1000
+                                  }
             
             nonDefaultParams = False
 
@@ -503,9 +538,18 @@ def main():
                 spinnerText = spinnerText.replace("\n\t", tableHeader+tableHeader2, 1)
 
                 spinnerDF = pd.DataFrame(spinnerDFList, columns=['Parameter', "Value Selected", "Selected value type", 'Default Value', 'Default value type'])
+            
+            inputData = st.session_state.input_data
+            if hasattr(st.session_state, 'data_ingested') and st.session_state.data_ingested:
+                inputData = st.session_state.stream_edited
+
+            SRUNText = '\n\n    -'.join([f"{str(k).ljust(25)} : {v}" for k, v in srun.items()])
+            update_session_log(f"Processing parameters:\n\n    -{SRUNText}")
+
             with st.spinner(spinnerText, show_time=True):
-                st.session_state.hvsr_data = sprit_hvsr.run(input_data=st.session_state.input_data, **srun)
-        
+                st.session_state.hvsr_data = sprit_hvsr.run(input_data=inputData, **srun)
+            update_session_log('Processing Complete')
+
         st.balloons()
 
         st.session_state.stream = st.session_state.hvsr_data['stream']
@@ -516,8 +560,12 @@ def main():
         st.toast('Displaying results (download available)')
         display_results()
         st.session_state.prev_datapath = st.session_state.input_data
+        update_session_log("Processed data displayed")
+        st.session_state.logTab.markdown(st.session_state.session_log)
+
 
     def on_read_data():
+        update_session_log(f"Started data read: {st.session_state.input_data}")
         if 'read_button' not in st.session_state.keys() or not st.session_state.read_button:
             return
 
@@ -526,7 +574,7 @@ def main():
             st.session_state.input_data = 'sample'
 
         st.session_state.mainContainer = st.container()
-        st.session_state.inputTab, st.session_state.infoTab = st.session_state.mainContainer.tabs(['Raw Seismic Data', 'Info'])
+        st.session_state.inputTab, st.session_state.infoTab, st.session_state.logTab = st.session_state.mainContainer.tabs(['Raw Seismic Data', 'Info', 'Logs'])
 
         if st.session_state.input_data != '':
             srun = {}
@@ -552,17 +600,23 @@ def main():
         else:
             st.session_state.stream_edited = st.session_state.hvsr_data.stream.copy()
 
+        update_session_log(f"Data ingested: \n{str(st.session_state.hvsr_data.stream).replace('Stream:', 'Stream:\n\n\t').replace('samples', 'samples\n\n\t')}")
         display_read_data(do_setup_tabs=False)
+        st.session_state.data_ingested = True
+        update_session_log("Ingested data displayed")
+        st.session_state.logTab.markdown(st.session_state.session_log)
 
 
     def do_interactive_display():
         if st.session_state.interactive_display:
             st.session_state.plot_engine = "Plotly"
+            update_session_log("Interactive plots activated (now using plotly)")
         else:
             st.session_state.plot_engine = "Matplotlib"
+            update_session_log("Interactive plots deactivated (now using matplotlib)")
+
 
     def display_read_data(do_setup_tabs=False):
-        
         if do_setup_tabs:
             st.session_state.mainContainer = st.container()
             st.session_state.inputTab, st.session_state.infoTab = st.session_state.mainContainer.tabs(['Raw Seismic Data', 'Info'])
@@ -573,20 +627,17 @@ def main():
             st.session_state.input_fig = make_input_fig_pyplot()
             
             if not hasattr(st.session_state, 'data_plot'):
-                st.session_state.data_chart_event = st.session_state.inputTab.pyplot(st.session_state.input_fig, use_container_width=True)
+                st.session_state.data_chart_event = st.session_state.inputTab.pyplot(st.session_state.input_fig, width='stretch')
                 st.session_state.data_plot = None
         else:
-            if not hasattr(st.session_state, 'data_plot'):
-                st.session_state.data_chart_event = st.session_state.inputTab.plotly_chart(st.session_state.input_fig,
+            st.session_state.data_chart_event = st.session_state.inputTab.plotly_chart(st.session_state.input_fig,
                                                 on_select=update_data, key='data_plot', 
-                                                selection_mode='box', use_container_width=True, theme='streamlit')
-            else:
-                st.session_state.data_chart_event = st.session_state.data_plot
+                                                selection_mode='box', width='stretch', theme='streamlit')
 
             st.session_state.inputTab.write("Select any time window with the Box Selector (see the top right of chart) to remove it from analysis.")
-            st.session_state.input_selection_mode = st.session_state.inputTab.pills('Window Selection Mode', options=['Add', "Delete"], key='input_selection_toggle',
-                                                        default='Add', on_change=update_selection_type, disabled=True,
-                                                        help='If in "Add" mode, windows for removal will be added at your selection. If "Delete" mode, these windows will be deleted. Currently only "Add" supported')
+            #st.session_state.input_selection_mode = st.session_state.inputTab.pills('Window Selection Mode', options=['Add', "Delete"], key='input_selection_toggle',
+            #                                            default='Add', on_change=update_selection_type, disabled=True,
+            #                                            help='If in "Add" mode, windows for removal will be added at your selection. If "Delete" mode, these windows will be deleted. Currently only "Add" supported')
         
 
         # Print information about the data to Info tab
@@ -624,12 +675,12 @@ def main():
                 st.session_state.input_fig = make_input_fig_plotly()
                 st.session_state.data_chart_event = st.session_state.inputTab.plotly_chart(st.session_state.input_fig,
                                                     on_select=update_data, key='data_plot',
-                                                    selection_mode='box', use_container_width=True, theme='streamlit')
+                                                    selection_mode='box', width='stretch', theme='streamlit')
 
                 st.session_state.inputTab.write("Select any time window with the Box Selector (see the top right of chart) to remove it from analysis.")
-                st.session_state.input_selection_mode = st.session_state.inputTab.pills('Window Selection Mode', options=['Add', "Delete"], key='input_selection_toggle',
-                                                        default='Add', on_change=update_selection_type, disabled=True, 
-                                                        help='If in "Add" mode, windows for removal will be added at your selection. If "Delete" mode, these windows will be deleted. Currently only "Add" supported')
+                #st.session_state.input_selection_mode = st.session_state.inputTab.pills('Window Selection Mode', options=['Add', "Delete"], key='input_selection_toggle',
+                #                                        default='Add', on_change=update_selection_type, disabled=True, 
+                #                                        help='If in "Add" mode, windows for removal will be added at your selection. If "Delete" mode, these windows will be deleted. Currently only "Add" supported')
             
             else:
                 st.session_state.inputTab.toggle(label='Display input data stream and windows used',
@@ -650,7 +701,7 @@ def main():
                                                 on_change=display_buttons_and_results)
 
             if st.session_state.interactive_display:
-                st.session_state.plotReportTab.plotly_chart(st.session_state.hvsr_data['Plot_Report'], use_container_width=True)
+                st.session_state.plotReportTab.plotly_chart(st.session_state.hvsr_data['Plot_Report'], width='stretch')
             else:
                 st.session_state.plotReportTab.html(st.session_state.hvsr_data["HTML_Report"])
 
@@ -661,7 +712,7 @@ def main():
             # Input plot
             st.session_state.input_fig = make_input_fig_pyplot()
             st.session_state.data_chart_event = st.session_state.inputTab.pyplot(st.session_state.input_fig,
-                                                                                 use_container_width=True)
+                                                                                 width='stretch')
 
             # Info tab
             write_to_info_tab(st.session_state.infoTab)
@@ -670,17 +721,18 @@ def main():
             outlier_plot_in_tab()
 
             if st.session_state.interactive_display:
-                st.session_state.plotReportTab.pyplot(st.session_state.hvsr_data['Plot_Report'], use_container_width=True)
+                st.session_state.plotReportTab.pyplot(st.session_state.hvsr_data['Plot_Report'], width='stretch')
             else:
                 st.session_state.plotReportTab.html(st.session_state.hvsr_data["HTML_Report"])
-                #st.session_state.plotReportTab.pyplot(st.session_state.hvsr_data['Plot_Report'], use_container_width=True)
+                #st.session_state.plotReportTab.pyplot(st.session_state.hvsr_data['Plot_Report'], width='stretch')
             st.session_state.csvReportTab.dataframe(data=st.session_state.hvsr_data['Table_Report'])
             st.session_state.strReportTab.code(st.session_state.hvsr_data['Print_Report'], language=None)
+
 
     @st.fragment
     def display_download_buttons():
         ##dlText, dlPDFReport, dlStream, dlTable, dlPlot, dlHVSR = st.session_state.mainContainer.columns([0.2, 0.16, 0.16, 0.16, 0.16, 0.16])
-        dlText, dlStream, dlHVSR, dlPDFReport, dlTable, dlPlot = st.columns([0.2, 0.16, 0.16, 0.16, 0.16, 0.16])
+        dlText, dlStream, dlJSON, dlHVSR, dlPDFReport, dlTable, dlPlot = st.columns([0.2, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1])
         st.divider()
 
         # Download Buttons
@@ -771,6 +823,21 @@ def main():
             )
 
 
+        # JSON File
+        def _convert_json_for_download(hv_data):
+            return hv_data.to_json()
+
+        jsonText = _convert_json_for_download(hvData)
+
+        dlJSON.download_button(
+            label="JSON",
+            data=jsonText,
+            file_name=f"{hvData.site}_JSON_{hvID}_{nowTimeStr}.json",
+            mime="application/json",
+            icon=":material/data_object:"
+            )
+
+
         # HVSR File
         try:
             #@st.cache_data
@@ -789,9 +856,9 @@ def main():
 
             ##st.session_state.dlHVSR.download_button(
             dlHVSR.download_button(
-                label="Pickled (.hvsr)",
+                label="Pickled",
                 data=hvsrPickle,
-                file_name=f"{hvData.site}_HVSRData_{hvID}_{nowTimeStr}_pickled_app.hvsr",
+                file_name=f"{hvData.site}_HVSRData_{hvID}_{nowTimeStr}_pickled_fromApp.hvsr",
                 #on_click=display_results,
                 mime='application/octet-stream',
                 icon=":material/database:")
@@ -808,6 +875,7 @@ def main():
     def on_reset():
         st.toast("Session state cleared")
         st.session_state = st.session_state['NewSessionState']
+        update_session_log("Session state cleared")
 
 
     def _get_use_array(hvsr_data, f=None, timeWindowArr=None, psdArr=None):
@@ -911,6 +979,7 @@ def main():
 
         return inputFig
 
+
     def make_input_fig_plotly():
         no_subplots = 5
         inputFig = make_subplots(rows=no_subplots, cols=1,
@@ -923,7 +992,7 @@ def main():
         hvsr_data = st.session_state.hvsr_data
 
         # Windows PSD and Used
-        #psdArr = np.flip(hvsr_data.ppsds["Z"]['psd_values'].T)
+        #psdArr = np.flip(hvsr_data.psds["Z"]['psd_values'].T)
         zStream = st.session_state.stream.select(component='Z').merge() 
         zTraces = zStream.split()
         zTrace = zStream[0]
@@ -1177,6 +1246,7 @@ def main():
 
 
     def update_data():
+        update_session_log("Manually removed data times used for processing/analysis")
         st.session_state.data_chart_event = st.session_state.data_plot
         specKey = 'Z'
         hvsrBand = st.session_state.hvsr_data.hvsr_band
@@ -1219,9 +1289,9 @@ def main():
             st.session_state.hvsr_data['x_windows_out'].append(currUTCWin)
 
             # Trim data with gap in the middle where we remvoed data
-            if st.session_state.input_selection_mode == 'Add':
-                stream1.trim(starttime=stream1[0].stats.starttime, endtime=currUTCWin[0])
-                stream2.trim(starttime=currUTCWin[1], endtime=stream2[0].stats.endtime)
+            #if st.session_state.input_selection_mode == 'Add':
+            stream1.trim(starttime=stream1[0].stats.starttime, endtime=currUTCWin[0])
+            stream2.trim(starttime=currUTCWin[1], endtime=stream2[0].stats.endtime)
 
             # Merge data back
             newStream = (stream1 + stream2).merge()
@@ -1283,13 +1353,14 @@ def main():
 
 
     def update_selection_type():
-        st.session_state.input_selection_mode = st.session_state.input_selection_toggle
+        #st.session_state.input_selection_mode = st.session_state.input_selection_toggle
+        pass
 
 
     def write_to_info_tab(infoTab):
         with infoTab:
             st.markdown("# Processing Parameters Used")
-            hvsrDataList = ['params', 'hvsr_data', 'hvsr_results']
+            hvsrDataList = ['params', 'input_paramters', 'hvsr_data', 'hvsr_results']
             for fun, kwargDict in funList:
                 funSig = inspect.signature(fun)
                 # excludeKeys = ['params', 'hvsr_data', 'hvsr_results']
@@ -1319,6 +1390,7 @@ def main():
 
 
     def update_outlier():
+        update_session_log("Manually selected curves to remove from H/V analysis")
         hvDF = st.session_state.hvsr_data['hvsr_windows_df']
         
         st.session_state.outlier_chart_event = st.session_state.outlier_plot
@@ -1352,7 +1424,7 @@ def main():
             outlierFig = sprit_plot.plot_outlier_curves(st.session_state.hvsr_data, 
                                                         plot_engine='Matplotlib')
             st.session_state.outlierTab.pyplot(outlierFig, 
-                                               use_container_width=True)
+                                               width='stretch')
             st.session_state.outlier_plot = None
         else:
             hvDF = st.session_state.hvsr_data['hvsr_windows_df']
@@ -1415,7 +1487,7 @@ def main():
             st.session_state.outlierTab.plotly_chart(outlierFig, 
                                     on_select=update_outlier, 
                                     key='outlier_plot', 
-                                    use_container_width=True, 
+                                    width='stretch', 
                                     theme='streamlit') 
 
 
@@ -1423,6 +1495,45 @@ def main():
         pass
 
 
+    def get_gmrt_elev():
+        # Only do this if inputs have been defined
+        if 'xcoord' not in st.session_state:
+            return
+        
+        elevation_source = GMRT_BASE_URL
+        points_crs = st.session_state.input_crs
+        raster_crs = 4326
+        xcoord = float(st.session_state.xcoord)
+        ycoord = float(st.session_state.ycoord)
+
+        ptCoordTransformerRaster = pyproj.Transformer.from_crs(crs_from=points_crs,
+                                                           crs_to=raster_crs,
+                                                           always_xy=True)
+        xcoord_RAST, ycoord_RAST = ptCoordTransformerRaster.transform(xcoord, ycoord)
+
+        #GMRT_URL = r"https://www.gmrt.org:443/services/GridServer?minlongitude=-88.4&maxlongitude=-88.2%2C%20&minlatitude=40.1&maxlatitude=40.3&format=geotiff&resolution=default&layer=topo"
+        GMRT_URL = GMRT_BASE_URL.replace('minlongitude', f"minlongitude={xcoord_RAST-1:0.4f}")
+        GMRT_URL = GMRT_URL.replace('maxlongitude', f"maxlongitude={xcoord_RAST+1:0.4f}")
+        GMRT_URL = GMRT_URL.replace('minlatitude', f"minlatitude={ycoord_RAST-1:0.4f}")
+        GMRT_URL = GMRT_URL.replace('maxlatitude', f"maxlatitude={ycoord_RAST+1:0.4f}")
+
+        try:
+            import rioxarray as rxr
+        except:
+            st.info("You must have rioxarray installed (pip install rioxarray) in your python environment to use GMRT elevation data.")
+            st.session_state.ZTB_disabled = True
+            return
+
+        response = requests.get(url=GMRT_URL)
+        with io.BytesIO(response.content) as f:
+            elevData_m = rxr.open_rasterio(f)
+
+        if 'band' in elevData_m.dims:
+            elevData_m = elevData_m.isel(band=0)
+
+        elevVal = elevData_m.sel(x=xcoord_RAST, y=ycoord_RAST, method='nearest').values
+        st.session_state.elevation = str(f"{elevVal:.02f}")
+        st.info(f'Elevation updated to {elevVal:.02f}')
     # Initial setup
     setup_session_state()
 
@@ -1461,17 +1572,26 @@ def main():
                 runLabel = 'Demo Run'
                 readLabel = 'Demo Read'
 
-            resetCol.button('Reset', disabled=False, use_container_width=True,
+            resetCol.button('Reset', disabled=False, width='stretch',
                             on_click=on_reset, key='reset_button')
-            readCol.button(readLabel, disabled=False, use_container_width=True,
+            readCol.button(readLabel, disabled=False, width='stretch',
                         on_click=on_read_data, key='read_button')
-            runCol.button(runLabel, type='primary',  use_container_width=True,
+            runCol.button(runLabel, type='primary',  width='stretch',
                         on_click=on_run_data, key='run_button')
         
 
         if VERBOSE:
             print('Done setting up bottom container, session state length: ', len(st.session_state.keys()))
             print_param(PARAM2PRINT)
+
+        interCol, gmrtCol = st.columns([0.6,0.4])
+        interCol.toggle(label='Display interactive charts (slower)', value=False, key='interactive_display',
+                    on_change=do_interactive_display,
+                    help="Whether to display interactive charts for the data, outliers, and results charts. Interactive charts take longer to display, but allow graphical editing of the data.")
+        gmrtCol.checkbox(label='Use GMRT for Elevation', value=False, 
+                         on_change=get_gmrt_elev,
+                         help='Select this box to use the [Global Multiresolution Topography Synthesis](https://www.gmrt.org/about/index.php) data for elevation.',
+                         key='elev_wms_check')
 
         st.header('Settings')
         mainSettings = st.container()
@@ -1489,15 +1609,18 @@ def main():
                             options=['Seismometer', 'Raspberry Shake', 'Tromino Yellow', 'Tromino Blue'],
                             help='Some instruments require special inputs to read in the data correctly. If not one of the instruments listed, or if reading in an obspy-supported file directly, leave as "Seismometer"')
 
-            xCoordCol, yCoordCol, inCRSCol = st.columns([0.3333, 0.3333, 0.3333])
+            xCoordCol, yCoordCol, zCoordCol = st.columns([0.3, 0.3, 0.4])
+            inCRSCol, outCRSCol, elevUnitCol  = st.columns([0.3, 0.3, 0.3])
             xCoordCol.text_input('X Coordinate', help='i.e., Longitude or Easting', key='xcoord')
             yCoordCol.text_input('Y Coordinate', help='i.e., Latitude or Northing', key='ycoord')
+            st.session_state.ZTB_disabled = st.session_state.elev_wms_check       
+            zCoordCol.text_input('Z Coordinate', help='i.e., Elevation', key='elevation', disabled=st.session_state.ZTB_disabled)
+
+
+     
             inCRSCol.text_input('CRS', help='By default, "EPSG:4326". Can be EPSG code or anything accepted by pyproj.CRS.from_user_input()', key='input_crs')        
-            
-            zCoordCol, elevUnitCol, outCRSCol = st.columns([0.333, 0.333, 0.333])
-            zCoordCol.text_input('Z Coordinate', help='i.e., Elevation', key='elevation')
-            elevUnitCol.selectbox('Elev. (Z) Unit', options=['meters', 'feet'], key='elev_unit', help='i.e., Elevation unit')
             outCRSCol.text_input('CRS for Export', help='Can be EPSG code or anything accepted by pyproj.CRS.from_user_input()', key='output_crs')
+            elevUnitCol.selectbox('Elev. (Z) Unit', options=['meters', 'feet'], key='elev_unit', help='i.e., Elevation unit')
 
             # Date/time settings
             dateCol, sTimeCol, eTimeCol, tzoneCol = st.columns([0.3,0.25,0.25,0.2])
@@ -1528,13 +1651,8 @@ def main():
                             value=st.session_state.hvsr_band
                             )
 
-            st.toggle(label='Display interactive charts (slower)', value=False, key='interactive_display',
-                      on_change=do_interactive_display,
-                      help="Whether to display interactive charts for the data, outliers, and results charts. Interactive charts take longer to display, but allow graphical editing of the data.")
-
             if VERBOSE:
                 print_param(PARAM2PRINT)
-
 
         st.header('Additional Settings', divider='gray')
         with st.expander('Expand to modify additional settings'):
@@ -1626,7 +1744,7 @@ def main():
 
                 rawNoiseCol.toggle("Raw data", disabled=noiseRemDisabled, help='Whether to use the raw input data to remove noise.', key='remove_raw_noise')
 
-                remNoisePopover = st.popover('Remove Noise options', disabled=noiseRemDisabled,  use_container_width=True)
+                remNoisePopover = st.popover('Remove Noise options', disabled=noiseRemDisabled,  width='stretch')
                 with remNoisePopover:
                     # Auto noise
                     st.toggle("Auto Noise Removal", value=False, disabled=noiseRemDisabled, 
@@ -1721,21 +1839,27 @@ def main():
 
                     st.number_input('Cooldown Time (seconds)', disabled=cooldownDisabled, step=1, key='cooldown_time')
 
+                def update_ROC():
+                    ocr = st.session_state.outlier_curves_removal
+                    if hasattr(st.session_state, 'outlier_method'):
+                        if not ocr:
+                            st.session_state.outlier_method=None
 
-                st.toggle("Remove Outlier Curves", value=False,
+                st.toggle("Remove Outlier Curves", value=False, on_change=update_ROC,
                             help='Whether to remove outlier curves from input data.', key='outlier_curves_removal')
                 outlierCurveDisabled = not st.session_state.outlier_curves_removal
 
                 # Outlier curves
-                remCurvePopover = st.popover('Remove Outlier Curve Options', disabled=outlierCurveDisabled,  use_container_width=True)
+                remCurvePopover = st.popover('Remove Outlier Curve Options', disabled=outlierCurveDisabled, width='stretch')
                 with remCurvePopover:
-                    st.number_input("Outlier Threshold", disabled=outlierCurveDisabled, value=98, key='rmse_thresh')
+                    st.selectbox("Outlier Detection Method", options=[None, 'Prototype', 'DBSCAN'], disabled=outlierCurveDisabled, index=0, key='outlier_method')
+                    st.number_input("Outlier Threshold", disabled=outlierCurveDisabled, value=98, key='outlier_threshold')
                     st.radio('Threshold type', horizontal=True, disabled=outlierCurveDisabled, options=['Percentile', 'Value'], key='threshRadio')
                     st.session_state.use_percentile = st.session_state.threshRadio=='Percentile'
-                    st.radio('Threshold curve', horizontal=True, disabled=outlierCurveDisabled, options=['HV Curve', 'Component Curves'], key='curveRadio')
+                    st.radio('Threshold curve', horizontal=True, disabled=outlierCurveDisabled, options=['HV Curve', 'Component Curves'], index=1, key='curveRadio')
                     st.session_state.use_hv_curves = (st.session_state.curveRadio=='HV Curve')
-
-
+                    min_ptsDisabled = (st.session_state.outlier_method !='DBSCAN')
+                    st.number_input("DBSCAN Minimum Neighborhood Size", disabled=min_ptsDisabled, value=5, key='min_pts')
 
                 #noise_rem_method_list = ['None', 'Auto', 'Manual', 'Stalta', 'Saturation Threshold', 'Noise Threshold', 'Warmup', 'Cooldown', 'Buffer']
                 #st.multiselect("Noise Removal Method",
@@ -1761,7 +1885,7 @@ def main():
                 st.number_input('PPSD Window overlap (%, 0-1)', step=0.01, min_value=0.0, max_value=1.0, key='overlap')
                 st.number_input('Period Smoothing Width (octaves)', step=0.1, key='period_smoothing_width_octaves')
                 st.number_input('Period Step (octaves)', step=0.005, format="%.5f", key='period_step_octaves')
-                periodVals=[round(1/x,3) for x in bandVals]
+                periodVals=[round(1/x,5) for x in bandVals]
                 periodVals.sort()
 
                 st.select_slider('Period Limits (s)', options=periodVals, value=st.session_state.period_limits, key='period_limits')
@@ -1857,6 +1981,8 @@ def main():
                 if VERBOSE:
                     print_param(PARAM2PRINT)
 
+        st.button('View Logs',key='view_logs', help='Click to view logs on the main screen, or select the Logs tab if available',
+                  on_click=show_logs)
         if VERBOSE:
             print('Done setting up sidebar, session state length: ', len(st.session_state.keys()))
             print('Done setting up everything (end of main), session state length: ', len(st.session_state.keys()))
