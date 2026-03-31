@@ -464,24 +464,30 @@ def main():
             spinnerText = '## Data is processing with default parameters.'
             excludedKeys = ['plot_engine', 'plot_input_stream', 'show_plot', 'verbose', 'show_outlier_plot']
             NOWTIME = datetime.datetime.now()
-            secondaryDefaults = {'acq_date': datetime.date(NOWTIME.year, NOWTIME.month, NOWTIME.day),
-                                 'hvsr_band': tuple(DEFAULT_BAND_LIST), 'use_hv_curves': True,
-                                 'starttime':datetime.time(0,0,0),
-                                 'endtime':datetime.time(23, 59, 0),
-                                 'peak_freq_range':tuple(DEFAULT_BAND_LIST),
-                                 'stalta_thresh':(8, 16),
-                                 'period_limits':(1/DEFAULT_BAND_LIST[1], 1/DEFAULT_BAND_LIST[0]),
-                                 'remove_method':['None'],
-                                 'report_export_format':None,
-                                 'report_formats':  ['print', 'table', 'plot', 'html', 'pdf'] ,
-                                 'show_pdf_report':False,
-                                 'show_print_report':True,
-                                 'show_plot_report':False,
-                                 'elev_unit':'m',
-                                 'plot_type':'HVSR p ann C+ p ann Spec p',
-                                 'suppress_report_outputs':True
-                                    }
-            
+            secondaryDefaults = {'acq_date': datetime.date(NOWTIME.year,
+                                                           NOWTIME.month,
+                                                           NOWTIME.day),
+                                 'hvsr_band': tuple(DEFAULT_BAND_LIST),
+                                 'use_hv_curves': True,
+                                 'starttime': datetime.time(0, 0, 0),
+                                 'endtime': datetime.time(23, 59, 0),
+                                 'peak_freq_range': tuple(DEFAULT_BAND_LIST),
+                                 'stalta_thresh': (8, 16),
+                                 'period_limits': (1/DEFAULT_BAND_LIST[1],
+                                                   1/DEFAULT_BAND_LIST[0]),
+                                 'remove_method': ['None'],
+                                 'report_export_format': None,
+                                 'report_formats':  ['print', 'table', 'plot',
+                                                     'html', 'pdf'],
+                                 'show_pdf_report': False,
+                                 'show_print_report': True,
+                                 'show_plot_report': False,
+                                 'elev_unit': 'm',
+                                 'plot_type': 'HVSR p ann C+ p ann Spec p',
+                                 'suppress_report_outputs': True,
+                                 'resample': 1000
+                                 }
+
             nonDefaultParams = False
 
             srun['report_formats'] = ['print', 'table', 'plot', 'html', 'pdf']
