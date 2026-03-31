@@ -13,7 +13,7 @@ import requests
 import sys
 import tempfile
 import zoneinfo
-        
+
 import matplotlib
 import numpy as np
 import pandas as pd
@@ -434,12 +434,7 @@ def main():
             if key in st.session_state.run_kws:
                 if value != st.session_state.default_params[key]:
                     if str(value) != str(st.session_state.default_params[key]):
-                        if isinstance(value, (tuple, list)):
-                            if tuple(value) != tuple(st.session_state.default_params[key]):
-                                srun[key] = value
-                                print("ADDED", key, value)
-                        else:
-                            srun[key] = value                           
+                        srun[key] = value
             
             if key == 'plot_engine':
                 srun[key] = value
@@ -480,13 +475,12 @@ def main():
                                  'report_export_format':None,
                                  'report_formats':  ['print', 'table', 'plot', 'html', 'pdf'] ,
                                  'show_pdf_report':False,
-                                 'show_print_report': True,
-                                 'show_plot_report': False,
-                                 'elev_unit': 'm',
-                                 'plot_type': 'HVSR p ann C+ p ann Spec p',
-                                 'suppress_report_outputs': True,
-                                 'resample': 1000
-                                  }
+                                 'show_print_report':True,
+                                 'show_plot_report':False,
+                                 'elev_unit':'m',
+                                 'plot_type':'HVSR p ann C+ p ann Spec p',
+                                 'suppress_report_outputs':True
+                                    }
             
             nonDefaultParams = False
 
