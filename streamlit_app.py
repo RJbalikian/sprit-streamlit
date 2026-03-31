@@ -29,13 +29,14 @@ from obspy import UTCDateTime
 from obspy.signal.spectral_estimation import PPSD
 from scipy import signal
 
+
+parent_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, parent_dir)
+
 try:
-    import sprit
-    from sprit import sprit_hvsr
-    from sprit import sprit_plot
+    from . import sprit_hvsr
+    from . import sprit_plot
 except Exception:
-    parent_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    sys.path.insert(0, parent_dir)
     import sprit
     from sprit import sprit_hvsr
     from sprit import sprit_plot
@@ -731,12 +732,10 @@ def main():
 
     @st.fragment
     def display_download_buttons():
-        ##dlText, dlPDFReport, dlStream, dlTable, dlPlot, dlHVSR = st.session_state.mainContainer.columns([0.2, 0.16, 0.16, 0.16, 0.16, 0.16])
-        dlText, dlStream, dlJSON, dlHVSR, dlPDFReport, dlTable, dlPlot = st.columns([0.2, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1])
+        dlText, dlStream, dlJSON, dlPDFReport, dlHVSR, dlTable, dlPlot = st.columns([0.2, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1])
         st.divider()
 
         # Download Buttons
-        ##st.session_state.dlText.text("Download Results: ")
         dlText.text("Download Results: ")
 
         # Set up variables for download section
@@ -759,13 +758,11 @@ def main():
 
         dlPDFReport.download_button(label="Report (.pdf)",
                     data=pdf_byte,
-                    #on_click=display_results,
                     file_name=f"{hvData.site}_Report_{hvID}_{nowTimeStr}.pdf",
                     mime='application/octet-stream',
                     icon=":material/summarize:")
 
         # Data Stream
-        #@st.cache_data
         def _convert_stream_for_download(_stream):
             strm = io.BytesIO()
             _stream = _stream.split()
@@ -773,7 +770,6 @@ def main():
             return strm.getvalue()
         streamBytes = _convert_stream_for_download(hvData.stream)
 
-        ##st.session_state.dlStream.download_button(
         dlStream.download_button(
             label='Data (.mseed)',
             data=streamBytes,
@@ -783,13 +779,11 @@ def main():
         )
 
         # Table download
-        #@st.cache_data
         def _convert_table_for_download(df):
             return df.to_csv().encode("utf-8")
 
         csv = _convert_table_for_download(st.session_state.hvsr_data['Table_Report'])
 
-        ##st.session_state.dlTable.download_button(
         dlTable.download_button(
             label="Table (.csv)",
             data=csv,
@@ -800,28 +794,31 @@ def main():
         )
 
         # Plot
-        #@st.cache_data
         def _convert_plot_for_download(_HV_Plot):            
             _img = io.BytesIO()
             if st.session_state.plot_engine == 'Matplotlib':
                 _HV_Plot.savefig(_img, format='png')
             else:
                 _img = _HV_Plot.to_image(format='png')
-            
+
             return _img
-
-        img = _convert_plot_for_download(hvData['Plot_Report'])
-
-        ##st.session_state.dlPlot.download_button(
-        dlPlot.download_button(
-            label="Plot (.png)",
-            data=img,
-            file_name=f"{hvData.site}_HV-Plot_{hvID}_{nowTimeStr}.png",
-            mime="image/png",
-            #on_click=display_results,
-            icon=":material/analytics:"
-            )
-
+        
+        try:
+            img = _convert_plot_for_download(hvData['Plot_Report'])
+            ##st.session_state.dlPlot.download_button(
+            dlPlot.download_button(
+                label="Plot (.png)",
+                data=img,
+                file_name=f"{hvData.site}_HV-Plot_{hvID}_{nowTimeStr}.png",
+                mime="image/png",
+                icon=":material/analytics:"
+                )
+        except:
+            dlPlot.download_button(
+                label="Plot not available",
+                data='Plot',
+                disabled=True,
+                icon=":material/analytics:")
 
         # JSON File
         def _convert_json_for_download(hv_data):
